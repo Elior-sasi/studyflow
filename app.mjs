@@ -1,4 +1,4 @@
-import {emptyState,validate,migrate,uid,today,validDate,validURL,removeCourse,weekDates,stats,reviewQueue,reviewDue,weeklyReport,lumiReply} from './model.mjs';
+import {emptyState,validate,migrate,uid,today,validDate,validURL,removeCourse,weekDates,stats,reviewQueue,reviewDue,weeklyReport,attachmentBytes,lumiReply} from './model.mjs';
 const $=id=>document.getElementById(id),esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const KEY='studyflow-v2';let state=emptyState(),raw=null,locked=false,week=0,filter='',courseFilter='',quiz=null,revealed=false,chatLog=[],session=null,speaking=false;
 function status(s){$('status').textContent=s}
@@ -62,7 +62,7 @@ const actions={
  'export':exportBackup,'export-raw':()=>{download(JSON.stringify({current:localStorage.getItem(KEY),legacy:localStorage.getItem('studyflow'),recovery:localStorage.getItem(KEY+'-recovery')},null,2),'studyflow-original-data.json');status('עותק נתוני המקור הוכן להורדה.');},
  'persist':async()=>{try{const yes=await navigator.storage?.persist?.();status(yes?'הדפדפן אישר אחסון מתמשך. עדיין מומלץ גיבוי.':'אחסון מתמשך לא אושר או אינו נתמך. מומלץ לייצא גיבוי.')}catch{status('לא ניתן לבקש אחסון מתמשך. מומלץ לייצא גיבוי.')}},
  'lumi-tasks':()=>reply('מה המשימות הקרובות שלי?'),'lumi-progress':()=>reply('מה ההתקדמות שלי?'),'lumi-practice':()=>reply('איך לתרגל?'),
- 'open-material':id=>{const m=state.materials.find(x=>x.id===id);if(!m)return;if(m.kind==='link'){if(!validURL(m.url))throw Error('הקישור אינו תקין.');window.open(m.url,'_blank','noopener,noreferrer')}else{const a=document.createElement('a');a.href=m.data;a.download=m.filename||m.title;a.click()}},
+ 'open-material':id=>{const m=state.materials.find(x=>x.id===id);if(!m)return;if(m.kind==='link'){if(!validURL(m.url))throw Error('הקישור אינו תקין.');window.open(m.url,'_blank','noopener,noreferrer')}else{const file=attachmentBytes(m.data);download(file.bytes,m.filename||m.title,file.type)}},
  'speak-note':id=>{const n=state.notes.find(x=>x.id===id);if(n)speakText(n.title+'. '+n.text)},'stop-speech':()=>{stopSpeech();status('ההקראה נעצרה.')},'pause-speech':()=>{if('speechSynthesis'in window&&speaking){if(speechSynthesis.paused)speechSynthesis.resume();else speechSynthesis.pause()}},
  'start-session':id=>{if(session&&!confirm('קיים שעון פעיל. להתחיל מחדש ללא שמירת הזמן הקודם?'))return;session={courseId:id,kind:'study',started:Date.now(),elapsed:0,target:state.settings.minutes*60,paused:false,notified:false};closeEditor();location.hash='home';render();$('timer-card')?.scrollIntoView();status('זמן הלמידה התחיל. סיום ושמירה יתעדו רק זמן שעבר בפועל.');},
  'pause-timer':()=>{if(!session)return;session.elapsed=elapsed();session.started=Date.now();session.paused=!session.paused;render()},

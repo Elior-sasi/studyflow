@@ -2,7 +2,7 @@
 
 ## Automated checks
 
-`npm test`: 13 passing tests. `npm run check`: all three JS files parsed successfully. No runtime dependencies are installed. GitHub Actions runs the same regression and syntax checks for pushes and pull requests.
+`npm test`: 14 passing tests. `npm run check`: all three JS files parsed successfully. No runtime dependencies are installed. GitHub Actions runs the same regression and syntax checks for pushes and pull requests.
 
 Model tests cover empty first run, backup roundtrip (Hebrew, files, note versions, glossary), legacy migration without inventing study time, rejection of malformed data, executable links and active attachment MIME types, week/year boundaries, measured progress, repetition due dates, cascade deletion and local Lumi facts.
 
@@ -40,6 +40,8 @@ Disposable data were entered only on the preview branch origin, not the user's p
 - Valid backups can recover locked corrupt local state while preserving an original recovery copy when storage allows it.
 - Each shell release uses a new cache generation; navigation serves the coherent installed shell, avoiding new HTML mixed with old modules.
 - Rendered navigation and save flows focus the main heading for keyboard orientation.
+
+- Attachment downloads use reconstructed Blob bytes rather than direct data-URL navigation; exact UTF-8 roundtrip and malformed-base64 rejection are regression-tested.
 
 ## Remaining verification and full-product gates
 
