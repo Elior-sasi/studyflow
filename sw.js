@@ -1,4 +1,4 @@
-const CACHE='studyflow-shell-v4';
+const CACHE='studyflow-shell-v5';
 const CORE=['/','/index.html','/app.mjs','/model.mjs','/style.css','/manifest.webmanifest','/icon.svg'];
 self.addEventListener('install',event=>{event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(CORE)).then(()=>self.skipWaiting()))});
 self.addEventListener('activate',event=>{event.waitUntil(Promise.all([caches.keys().then(keys=>Promise.all(keys.filter(key=>key.startsWith('studyflow-')&&key!==CACHE).map(key=>caches.delete(key)))),self.clients.claim()]))});
