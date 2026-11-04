@@ -1,1 +1,1 @@
-{"name":"StudyFlow – לומי","short_name":"StudyFlow","start_url":"/","display":"standalone","background_color":"#0b1020","theme_color":"#0b1020","lang":"he","dir":"rtl"}
+{"id":"/","name":"StudyFlow – לומי","short_name":"StudyFlow","start_url":"/","scope":"/","display":"standalone","background_color":"#0c1324","theme_color":"#111b30","lang":"he","dir":"rtl","icons":[{"src":"/icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any"}]}
