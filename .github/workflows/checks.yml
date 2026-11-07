@@ -11,7 +11,19 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           persist-credentials: false
-      - name: Regression tests
-        run: node --test tests/*.test.mjs
       - name: Syntax checks
-        run: node --check app.mjs && node --check model.mjs && node --check sw.js
+        run: npm run check
+      - name: Unit, API and offline tests
+        run: npm test
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - name: Browser end-to-end tests (Chrome, mobile viewport, axe, offline, backup)
+        run: CHROME_PATH="$(which google-chrome || which chromium)" npm run e2e

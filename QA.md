@@ -1,3 +1,28 @@
+# Validation record - 2026-11-07 (0.3.0)
+
+## Automated checks (run in the development container)
+
+| Suite | Command | Result |
+| --- | --- | --- |
+| Syntax | `npm run check` | 8 files parsed |
+| Unit, API, service worker | `npm test` | 34 passed, 0 failed |
+| Browser end-to-end (Chrome 390x844, he-IL, touch) | `npm run e2e` | 11 passed, 0 failed |
+
+End-to-end coverage: empty first run shows no invented numbers; course and summary creation; card reader (next/previous, ArrowLeft/ArrowRight in RTL, reload resumes saved card, completion → 100% course coverage, completed filter); planner day task with completion and progress update; month and week views; practice reveal/grade; summary review diff and accept with version history; Lumi with a **mocked** provider (wrong code rejected, correct code verified, answer cites `[1]` and links to the exact card); AI proposal cancel leaves the summary unchanged; AI question suggestions saved only after selection; backup export (AI code excluded), `.ics` export, delete-all, import restores data, corrupt import rejected without changes; light theme, high contrast and 40 px text at 320 px width with no horizontal scroll and all visible controls ≥ 44 px; offline reload after first visit; no console errors.
+
+axe-core 4.10 (WCAG 2.0/2.1/2.2 A and AA rules) reported 0 violations on: home (empty and with data), progress (empty and with data), course detail, lesson slides, courses, planner day/week/month, practice, review dialog, settings, Lumi chat, light theme at 40 px, high contrast at 40 px.
+
+API tests (mocked provider fetch): not-configured 503, unauthorized 401 with no provider call, grounded system prompt with sources and address form, key never returned, 400/413/403/415 rejections, rate limit 429, provider failure 502/504, defensive JSON parsing, summary treated as data.
+
+## Not verified here
+
+- The real AI provider was not called: no key is configured in this environment or (as far as can be observed) in Vercel. AI flows are verified only against a mocked provider.
+- Real iPhone VoiceOver, Dynamic Type interaction and installed Hebrew voice output need device testing. Chrome in the container has no Hebrew voice, so speech was not audibly tested.
+- Production could not be reached from the container network; production checks are listed in the session report.
+
+
+---
+
 # Validation record — 2026-11-04
 
 ## Automated checks

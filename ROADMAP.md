@@ -2,6 +2,12 @@
 
 Source: StudyFlow_Lumi_אפיון_מרכזי.docx, version 1.0 (4 November 2026). This file is the implementation ledger, not an alternative specification. All original areas remain in scope.
 
+## Update 2026-11-07 (0.3.0)
+
+Newly implemented: card reader with resumable position and per-card read marks (areas 5, 6, 7); continuous listening and focus mode (7); accessible before/after review with accept/cancel and version origin (1, 4); server-side AI with grounded citations, improvement proposals and question suggestions, gated by server secrets and an access code (5); day/week/month planner with task types, times and exam dates (8); coverage, streak and period statistics derived from recorded actions (9); calendar file export (3, 8); theme, 40 px text, reduced motion (10); browser E2E and axe tests (10, 11).
+
+Still missing: authentication and cloud sync; OAuth integrations (Drive, Calendar, Moodle); OCR/PDF text extraction; push notifications; automatic schedule balancing; exam readiness; device VoiceOver testing; real-provider AI verification (needs `ANTHROPIC_API_KEY` and `LUMI_ACCESS_CODE` in Vercel).
+
 | Specification area | Implemented in local beta | Remaining before full product release |
 | --- | --- | --- |
 | 1. Principles | Local data, offline app shell, explicit destructive confirmation, undo and summary versions, no fabricated AI claims | Cloud audit history, proposal approval/diff workflow, authenticated ownership and source provenance |

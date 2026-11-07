@@ -1,11 +1,37 @@
 <!doctype html>
-<html lang="he" dir="rtl">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#111b30"><meta name="description" content="StudyFlow — סביבת לימוד נגישה בעברית, עם קורסים, סיכומים, תכנון ותרגול אישי."><title>StudyFlow · לומדים בדרך שלך</title><link rel="manifest" href="/manifest.webmanifest"><link rel="icon" href="/icon.svg" type="image/svg+xml"><link rel="stylesheet" href="/style.css"><script type="module" src="/app.mjs"></script></head>
-<body><a class="skip" href="#main">דלג לתוכן</a><header><a class="logo" href="#home">✦ <span>StudyFlow<small>לומדים בדרך שלך</small></span></a><div class="actions"><button id="undo" disabled>ביטול שינוי אחרון</button><button id="access-toggle" aria-expanded="false" aria-controls="access-panel">נגישות Aa</button></div></header>
-<aside id="access-panel" hidden aria-label="הגדרות נגישות"><label for="font-size">גודל טקסט</label><input id="font-size" type="range" min="18" max="32" step="2"><output id="font-value" for="font-size"></output><label><input type="checkbox" id="contrast"> ניגודיות גבוהה</label><p>אפשר לנווט במקלדת. הקראה דורשת קול עברי במכשיר.</p></aside>
-<div id="storage-error" class="notice error" hidden role="alert"></div><div id="update" class="notice" hidden>יש גרסה חדשה. הנתונים נשמרו. <button id="reload">טען מחדש</button></div><p id="status" role="status" aria-live="polite"></p>
-<nav id="navigation" aria-label="ניווט ראשי"><a href="#home">בית</a><a href="#courses">קורסים וחומרים</a><a href="#plan">תכנון שבועי</a><a href="#practice">תרגול</a><a href="#progress">התקדמות</a><a href="#lumi">לומי</a></nav>
-<main id="main" tabindex="-1"></main>
-<footer>StudyFlow · בטא מקומית 0.2 · סביבת לימוד אישית במכשיר זה. אין סנכרון ענן או AI מחובר.<br>מומלץ לייצא גיבוי באופן קבוע דרך מסך ההתקדמות.</footer>
-<dialog id="editor" aria-labelledby="editor-title"><form id="editor-form"><div class="row"><h2 id="editor-title"></h2><button type="button" id="close-editor" aria-label="סגירת החלון">✕</button></div><div id="editor-fields"></div><p id="form-error" class="error" role="alert"></p><div class="actions"><button class="primary" type="submit">שמירה</button><button type="button" id="cancel-editor">ביטול</button></div></form></dialog>
-</body></html>
+<html lang="he" dir="rtl" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#070b1a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="StudyFlow">
+<meta name="description" content="StudyFlow - סביבת לימוד נגישה בעברית: קורסים, שיעורים עם הקראה, תוכנית לימודים, תרגול והתקדמות אמיתית.">
+<title>StudyFlow · לומדים בדרך שלך</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/icon.svg">
+<link rel="stylesheet" href="/style.css">
+<script type="module" src="/app.mjs"></script>
+</head>
+<body>
+<a class="skip" href="#main">דלג לתוכן</a>
+<div id="storage-error" class="notice error" hidden role="alert"></div>
+<div id="update" class="notice" hidden>יש גרסה חדשה. הנתונים נשמרו. <button id="reload" type="button">טען מחדש</button></div>
+<main id="main" tabindex="-1"><noscript><p>StudyFlow דורש JavaScript.</p></noscript></main>
+<div id="dock">
+  <div id="timer-bar" hidden></div>
+  <div id="toast" class="toast idle"><p id="status" role="status" aria-live="polite"></p><button id="undo" type="button" hidden>ביטול השינוי</button></div>
+  <nav id="tabbar" aria-label="ניווט ראשי"></nav>
+</div>
+<dialog id="editor" aria-labelledby="editor-title">
+  <form id="editor-form" novalidate>
+    <div class="dialog-head"><h2 id="editor-title"></h2><button type="button" id="close-editor" class="icon-btn" aria-label="סגירת החלון">✕</button></div>
+    <div id="editor-fields"></div>
+    <p id="form-error" class="error" role="alert"></p>
+    <div class="actions dialog-actions"><button class="primary" type="submit" id="editor-submit">שמירה</button><button type="button" id="cancel-editor">ביטול</button></div>
+  </form>
+</dialog>
+</body>
+</html>
