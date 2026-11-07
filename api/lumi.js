@@ -95,7 +95,10 @@ export function providerOf(env) {
 async function callProvider(provider, env, req, json, fetchImpl, signal) {
   if (provider === 'gemini') {
     const model = env.LUMI_MODEL || 'gemini-3.8-flash';
-    const r = await fetchImpl(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+    let r;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      if (attempt) await new Promise(res => setTimeout(res, 1200 * attempt));
+      r = await fetchImpl(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
       method: 'POST',
       signal,
       headers: { 'content-type': 'application/json', 'x-goog-api-key': env.GEMINI_API_KEY },
@@ -104,7 +107,9 @@ async function callProvider(provider, env, req, json, fetchImpl, signal) {
         contents: req.messages.map(m => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] })),
         generationConfig: { maxOutputTokens: req.max_tokens * 2, temperature: 0.4, ...(json ? { responseMimeType: 'application/json' } : {}), ...(/^gemini-2\.5-flash/.test(model) ? { thinkingConfig: { thinkingBudget: 0 } } : {}) },
       }),
-    });
+      });
+      if (r.status !== 503 && r.status !== 429) break;
+    }
     if (!r.ok) {
       const err = await r.json().catch(() => ({}));
       return { ok: false, status: r.status, detail: [err.error?.status, err.error?.message].filter(Boolean).join(': ').replace(/AQ\.[\w.-]+|AIza[\w-]+/g, '[key]').slice(0, 240) };
@@ -150,7 +155,7 @@ export function createHandler({ env, fetchImpl, now = () => Date.now() }) {
       const timer = setTimeout(() => controller.abort(), 45_000);
       try {
         const r = await callProvider(providerOf(env), env, req, body.mode === 'questions', fetchImpl, controller.signal);
-        if (!r.ok) return json(502, { error: r.status === 429 ? 'provider_busy' : 'provider_error', upstream: r.status, detail: r.detail || '' });
+        if (!r.ok) return json(502, { error: r.status === 429 || r.status === 503 ? 'provider_busy' : 'provider_error', upstream: r.status, detail: r.detail || '' });
         const out = r.text;
         if (!out) return json(502, { error: 'empty_response' });
         if (body.mode === 'questions') {
