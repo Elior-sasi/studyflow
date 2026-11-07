@@ -445,7 +445,7 @@ const AI_ERRORS = { not_configured: 'השרת לא הוגדר עם ספק AI.', 
 const aiCode = () => { try { return localStorage.getItem(AI_KEY) || ''; } catch { return ''; } };
 async function callLumi(body, code = aiCode()) {
   if (!navigator.onLine) throw Error('אין חיבור לרשת. לומי AI זמין רק כשיש אינטרנט.');
-  const ctrl = new AbortController(), timer = setTimeout(() => ctrl.abort(), 60_000);
+  const ctrl = new AbortController(), timer = setTimeout(() => ctrl.abort(), 125_000);
   let r;
   try {
     r = await fetch('/api/lumi', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ...body, code, address: state.settings.address }), signal: ctrl.signal });

@@ -117,8 +117,9 @@ async function callProvider(provider, env, req, json, fetchImpl, signal) {
     const models = [...new Set([env.LUMI_MODEL || 'gemini-3.8-flash', 'gemini-flash-latest', 'gemini-flash-lite-latest'])];
     let r;
     for (const [i, model] of models.entries()) {
-      for (let attempt = 0; attempt < 2; attempt++) {
-        if (attempt) await new Promise(res => setTimeout(res, 1500));
+      let thinking = /^gemini-3/.test(model) || /latest$/.test(model);
+      for (let attempt = 0; attempt < 3; attempt++) {
+        if (attempt && r && r.status !== 400) await new Promise(res => setTimeout(res, 1500));
         r = await fetchImpl(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
           method: 'POST',
           signal,
@@ -126,9 +127,11 @@ async function callProvider(provider, env, req, json, fetchImpl, signal) {
           body: JSON.stringify({
             systemInstruction: { parts: [{ text: req.system }] },
             contents: req.messages.map(m => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] })),
-            generationConfig: { maxOutputTokens: req.max_tokens * 2, temperature: 0.4, ...(json ? { responseMimeType: 'application/json' } : {}) },
+            generationConfig: { maxOutputTokens: req.max_tokens * 4, temperature: 0.4, ...(json ? { responseMimeType: 'application/json' } : {}), ...(thinking ? { thinkingConfig: { thinkingLevel: 'low' } } : {}) },
           }),
         });
+        // Models that do not accept a thinking level answer 400: retry once without it.
+        if (r.status === 400 && thinking) { thinking = false; continue; }
         if (r.status !== 503 && r.status !== 429) break;
       }
       if (![503, 429, 404].includes(r.status) || i === models.length - 1) break;
@@ -175,7 +178,7 @@ export function createHandler({ env, fetchImpl, now = () => Date.now() }) {
 
       const req = buildRequest(body);
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 45_000);
+      const timer = setTimeout(() => controller.abort(), 110_000);
       try {
         const r = await callProvider(providerOf(env), env, req, body.mode === 'questions' || body.mode === 'slides', fetchImpl, controller.signal);
         if (!r.ok) return json(502, { error: r.status === 429 || r.status === 503 ? 'provider_busy' : 'provider_error', upstream: r.status, detail: r.detail || '' });
