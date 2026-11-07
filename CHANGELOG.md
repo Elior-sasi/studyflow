@@ -4,6 +4,7 @@
 
 - Lumi writes an organized **study summary** from any lesson (e.g. imported lecturer slides), saved as a new lesson.
 - A visible **"יצירה וייצוא מהשיעור"** panel under every lesson tab: Lumi summary / presentation / podcast, PowerPoint, print / PDF. Clearer empty state in courses.
+- "התקנה כאפליקציה" section: install button on Android/desktop Chrome, instructions for iPhone.
 - Android-ready PWA: PNG and maskable icons, shortcuts (plan, Lumi, practice), categories.
 
 ## 0.5.0 - 2026-11-08

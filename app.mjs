@@ -8,6 +8,10 @@ import * as C from './cloud.mjs';
 
 // Handle a Google sign-in redirect before anything reads the URL hash.
 const oauthReturn = C.consumeOAuthReturn();
+// Android/desktop Chrome: keep the install prompt so the app can offer a clear "install" button.
+let installPrompt = null;
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); installPrompt = e; if (route().name === 'more') render(); });
+window.addEventListener('appinstalled', () => { installPrompt = null; status('StudyFlow הותקנה כאפליקציה.'); });
 
 const $ = id => document.getElementById(id);
 const KEY = 'studyflow-v2'; // storage key kept for continuity; the stored object carries its own schema version
@@ -140,7 +144,7 @@ function render(focus = false) {
   if (r.name !== 'lesson' && ui.focus) { ui.focus = false; document.body.classList.remove('focus-mode'); }
   document.title = `${TITLES[r.name]} · StudyFlow`;
   renderNav();
-  const env = { bytes: new Blob([raw || '']).size, canUndo: undoStack.length > 0, moodle: moodleConn(), account: C.session(), sync: { ...C.syncMeta(), ...cloud }, push: { support: C.pushSupport(), on: Boolean(C.pushState()) } };
+  const env = { bytes: new Blob([raw || '']).size, canUndo: undoStack.length > 0, moodle: moodleConn(), account: C.session(), sync: { ...C.syncMeta(), ...cloud }, push: { support: C.pushSupport(), on: Boolean(C.pushState()) }, install: installPrompt ? 'prompt' : (window.matchMedia?.('(display-mode: standalone)').matches || navigator.standalone) ? 'installed' : /iPhone|iPad|iPod/.test(navigator.userAgent) ? 'ios' : /Android/.test(navigator.userAgent) ? 'android' : 'other' };
   const view = {
     home: () => V.home(state, ui), lumi: () => V.lumiView(state, ui), courses: () => V.courses(state, ui),
     course: () => V.courseDetail(state, ui, r.id), lesson: () => V.lesson(state, ui, r.id), plan: () => V.plan(state, ui),
@@ -745,6 +749,14 @@ const actions = {
   'moodle-connect': () => moodleConnect(),
   'moodle-sync': () => moodleSync(),
   'moodle-forget': () => { if (!confirm('לנתק את Moodle מהדפדפן הזה? הקורסים והמשימות שיובאו נשארים.')) return; try { localStorage.removeItem(MOODLE_KEY); } catch {} render(); status('Moodle נותק.'); },
+  install: async () => {
+    if (!installPrompt) return;
+    installPrompt.prompt();
+    const r = await installPrompt.userChoice.catch(() => null);
+    installPrompt = null;
+    render();
+    status(r?.outcome === 'accepted' ? 'מתקין את StudyFlow…' : 'ההתקנה בוטלה.');
+  },
   login: () => C.startGoogleAuth('login', [], '#more'),
   logout: () => {
     if (!confirm('להתנתק מהחשבון במכשיר הזה? הנתונים נשארים במכשיר ובענן.')) return;
