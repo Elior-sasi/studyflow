@@ -202,7 +202,7 @@ test('PowerPoint import, PowerPoint export and print view', async () => {
   assert.match(await main().innerText(), /כרטיס 1 מתוך 2/);
   assert.match(await main().innerText(), /יובא מקובץ/);
   await page.getByRole('button', { name: 'סיכום', exact: true }).click();
-  const [dl] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'ייצוא PowerPoint' }).click()]);
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'PowerPoint', exact: true }).click()]);
   assert.match(dl.suggestedFilename(), /\.pptx$/);
   const { pptxToMarkdown } = await import('../../importers.mjs');
   const back = await pptxToMarkdown(await readFile(await dl.path()));
@@ -216,16 +216,19 @@ test('PowerPoint import, PowerPoint export and print view', async () => {
   await axe('print view');
 });
 
-test('Lumi creates a presentation and a podcast from a summary (mocked provider)', async () => {
+test('Lumi creates a summary, a presentation and a podcast from a lesson (mocked provider)', async () => {
   await page.evaluate(() => history.back());
   await page.waitForURL(/#lesson\//);
-  await page.getByRole('button', { name: 'סיכום', exact: true }).click();
-  await page.getByRole('button', { name: /לומי: יצירת מצגת/ }).click();
+  await page.getByRole('button', { name: /לומי: סיכום/ }).click();
+  await page.waitForFunction(() => document.querySelector('main').innerText.includes('נושא ראשון (בדיקה)'));
+  assert.match(await page.locator('.page-head').innerText(), /סיכום: sample/);
+  await page.evaluate(() => history.back());
+  await page.waitForURL(/#lesson\//);
+  await page.getByRole('button', { name: /לומי: מצגת/ }).click();
   await page.waitForFunction(() => document.querySelector('main').innerText.includes('מצגת שלומי יצר'));
   assert.match(await main().innerText(), /פתיחה \(בדיקה\)/);
   assert.match(await main().innerText(), /כרטיס 1 מתוך 2/);
-  await page.getByRole('button', { name: 'סיכום', exact: true }).click();
-  await page.getByRole('button', { name: /לומי: יצירת פודקאסט/ }).click();
+  await page.getByRole('button', { name: /לומי: פודקאסט/ }).click();
   await page.waitForFunction(() => document.querySelector('main').innerText.includes('פודקאסט שלומי כתב'));
   assert.equal(await page.locator('#continuous').isChecked(), true);
   assert.equal(await page.getByRole('button', { name: /פקודות קוליות/ }).count(), 1);

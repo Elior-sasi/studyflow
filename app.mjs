@@ -721,6 +721,16 @@ const actions = {
     location.hash = 'lesson/' + v.id;
     status(`נוצרה מצגת של ${j.slides.length} שקופיות. אפשר לערוך אותה או לייצא ל-PowerPoint.`, { undo: true });
   },
+  'ai-summary': async id => {
+    const n = state.notes.find(x => x.id === id);
+    if (!n) return;
+    status('לומי כותב סיכום מסודר… זה יכול לקחת עד דקה.');
+    const j = await callLumi({ mode: 'summary', title: n.title, text: n.text.slice(0, 30000) });
+    const v = { id: M.uid(), courseId: n.courseId, title: ('סיכום: ' + n.title.replace(/^(מצגת|פודקאסט|סיכום): /, '')).slice(0, 200), text: j.text.slice(0, 200000), updatedAt: new Date().toISOString(), position: 0, kind: 'summary' };
+    commit(d => { d.notes.push(v); });
+    location.hash = 'lesson/' + v.id;
+    status('הסיכום מוכן ונשמר כשיעור חדש. כדאי לעבור עליו ולתקן אם צריך.', { undo: true });
+  },
   'ai-podcast': async id => {
     const n = state.notes.find(x => x.id === id);
     if (!n) return;

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.1 - 2026-11-08
+
+- Lumi writes an organized **study summary** from any lesson (e.g. imported lecturer slides), saved as a new lesson.
+- A visible **"יצירה וייצוא מהשיעור"** panel under every lesson tab: Lumi summary / presentation / podcast, PowerPoint, print / PDF. Clearer empty state in courses.
+- Android-ready PWA: PNG and maskable icons, shortcuts (plan, Lumi, practice), categories.
+
 ## 0.5.0 - 2026-11-08
 
 - **Sign in with Google and cloud sync** between devices: OAuth redirect flow without third-party scripts; the server verifies the Google ID token (audience, issuer, expiry, verified email, nonce) and an allow list (`STUDYFLOW_ALLOWED_EMAILS`), then issues a signed 120-day session. Data is stored per user in Neon Postgres (`DATABASE_URL` from the Vercel integration) with version compare-and-set; conflicts ask which copy to keep and keep the other as a local backup.

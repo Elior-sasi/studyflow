@@ -143,7 +143,7 @@ export function courseDetail(st, ui, id) {
   <div class="actions">${btn(icon('timer') + ' התחלת זמן למידה', 'start-session', id, 'primary')}${btn(icon('edit') + ' עריכה', 'edit-course', id)}${btn(icon('archive') + (c.archived ? ' החזרה מארכיון' : ' העברה לארכיון'), 'archive-course', id)}${btn(icon('trash') + ' מחיקה', 'delete-course', id, 'danger')}</div></section>
 
   <div class="page-head" style="margin-bottom:0"><h2 class="section-title">שיעורים וסיכומים</h2><div class="actions" style="margin:0">${btn(icon('plus') + ' סיכום', 'edit-note', id)}${btn(icon('download') + ' מ-Drive', 'drive-import', id, '', 'aria-label="ייבוא מ-Google Drive"')}</div></div>
-  ${notes.length ? `<ul class="rows">${notes.map(n => { const np = noteProgress(st, n); return `<li><a class="row-link c-${esc(c.color)}" href="#lesson/${esc(n.id)}">${tile(c, 'doc')}<span class="grow"><span class="title">${esc(n.title)}</span><span class="sub">${np.total ? `${np.read} מתוך ${np.total} כרטיסים נקראו` : 'סיכום ריק'}</span>${np.total ? progressBar(np.ratio, 'התקדמות בשיעור ' + n.title) : ''}</span>${icon('chevron')}</a></li>`; }).join('')}</ul>` : `<div class="empty">אין עדיין סיכומים. אפשר להדביק טקסט או לייבא קובץ TXT / Markdown. כותרות "# " יוצרות כרטיסים נפרדים לקריאה ולהקראה.</div>`}
+  ${notes.length ? `<ul class="rows">${notes.map(n => { const np = noteProgress(st, n); return `<li><a class="row-link c-${esc(c.color)}" href="#lesson/${esc(n.id)}">${tile(c, 'doc')}<span class="grow"><span class="title">${esc(n.title)}</span><span class="sub">${np.total ? `${np.read} מתוך ${np.total} כרטיסים נקראו` : 'סיכום ריק'}</span>${np.total ? progressBar(np.ratio, 'התקדמות בשיעור ' + n.title) : ''}</span>${icon('chevron')}</a></li>`; }).join('')}</ul>` : `<div class="empty"><p>אין עדיין שיעורים. שלוש דרכים להתחיל:</p><ul style="text-align:start"><li><b>סיכום</b> - כותבים או מדביקים טקסט, או מייבאים מצגת PowerPoint, TXT או Markdown.</li><li><b>מ-Drive</b> - מסמך או מצגת מ-Google Drive.</li><li>אחר כך, בתוך השיעור, <b>לומי</b> יכול ליצור ממנו סיכום מסודר, מצגת או פודקאסט.</li></ul></div>`}
 
   <div class="page-head" style="margin-bottom:0"><h2 class="section-title">משימות ומועדים</h2>${btn(icon('plus') + ' משימה', 'new-task-course', id)}</div>
   ${tasks.length ? `<ul class="timeline">${tasks.map(t => timelineItem(st, t)).join('')}</ul>` : '<div class="empty">אין משימות לקורס הזה.</div>'}
@@ -161,6 +161,13 @@ function notFound(text) {
 }
 
 // ---------- Lesson ----------
+function toolsCard(n, ui) {
+  const ai = ui.ai.verified;
+  return `<section class="card" aria-labelledby="tools-h"><h2 id="tools-h">יצירה וייצוא מהשיעור</h2>
+    <div class="actions">${ai ? btn(icon('sparkle') + ' לומי: סיכום', 'ai-summary', n.id, 'primary') + btn(icon('sparkle') + ' לומי: מצגת', 'ai-slides', n.id) + btn(icon('headphones') + ' לומי: פודקאסט', 'ai-podcast', n.id) : ''}${btn(icon('download') + ' PowerPoint', 'export-pptx', n.id)}${btn(icon('doc') + ' הדפסה / PDF', 'go', '#print/' + n.id)}</div>
+    <p class="hint">${ai ? 'כל יצירה של לומי נשמרת כשיעור חדש באותו קורס. המקור לא משתנה.' : 'כדי שלומי ייצור סיכום, מצגת או פודקאסט צריך לחבר את לומי AI במסך "עוד".'}</p></section>`;
+}
+
 export function lesson(st, ui, noteId) {
   const n = st.notes.find(x => x.id === noteId);
   if (!n) return notFound('הסיכום לא נמצא. ייתכן שנמחק.');
@@ -191,9 +198,6 @@ export function lesson(st, ui, noteId) {
     </section>`;
   } else if (tab === 'text') {
     body = `<section class="card"><div class="actions">${btn(icon('edit') + ' עריכה', 'edit-note-existing', n.id)}${btn(icon('sparkle') + ' הצעת שינויים ובדיקה', 'review-note', n.id)}${ui.ai.verified ? btn(icon('sparkle') + ' לומי: הצעת שיפור', 'ai-improve', n.id, 'primary') : ''}${btn('גרסאות קודמות', 'note-versions', n.id)}${btn(icon('trash') + ' מחיקה', 'delete-note', n.id, 'danger')}</div>
-      <h2 class="small" style="margin:.6rem 0 .2rem">ייצוא ויצירה</h2>
-      <div class="actions">${btn(icon('download') + ' ייצוא PowerPoint', 'export-pptx', n.id)}${btn(icon('doc') + ' הדפסה / PDF', 'go', '#print/' + n.id)}${ui.ai.verified ? btn(icon('sparkle') + ' לומי: יצירת מצגת', 'ai-slides', n.id) + btn(icon('headphones') + ' לומי: יצירת פודקאסט', 'ai-podcast', n.id) : ''}</div>
-      ${ui.ai.verified ? '' : '<p class="hint">יצירת מצגת ופודקאסט מהסיכום זמינה כשלומי AI מחובר.</p>'}
       <p class="muted small">עודכן ${new Date(n.updatedAt).toLocaleString('he-IL')} · ${n.versions?.length || 0} גרסאות שמורות. שינוי מוצע אף פעם לא מחליף את הסיכום בלי אישור.</p></section>
       <article class="card" aria-label="הסיכום המלא">${cards.map((cd, i) => `<h2 style="margin-top:${i ? '1.2rem' : 0}">${esc(cd.title || n.title)}</h2>${formatBody(cd.body)}`).join('')}</article>`;
   } else {
@@ -204,7 +208,7 @@ export function lesson(st, ui, noteId) {
   }
   const kindLabel = { slides: 'מצגת שלומי יצר', podcast: 'פודקאסט שלומי כתב', import: 'יובא מקובץ' }[n.kind];
   return `${head(`למידה - ${esc(c?.name || '')}`, { back: '#course/' + esc(n.courseId), sub: esc(n.title) + (kindLabel ? ` · <span class="badge">${kindLabel}</span>` : '') })}
-  ${seg('תצוגת השיעור', 'lesson-tab', [['slides', 'מצגת'], ['text', 'סיכום'], ['quiz', 'שאלות']], tab)}${body}`;
+  ${seg('תצוגת השיעור', 'lesson-tab', [['slides', 'מצגת'], ['text', 'סיכום'], ['quiz', 'שאלות']], tab)}${body}${cards.length ? toolsCard(n, ui) : ''}`;
 }
 
 export function quizCard(st, ui) {

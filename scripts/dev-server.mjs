@@ -15,14 +15,15 @@ import { memoryStore, GOOGLE_CLIENT_ID } from '../api/_lib/core.js';
 const root = fileURLToPath(new URL('..', import.meta.url));
 const port = Number(process.argv.find(a => a.startsWith('--port='))?.slice(7) || 4173);
 const mock = process.argv.includes('--mock-ai');
-const TYPES = { '.html': 'text/html; charset=utf-8', '.mjs': 'text/javascript', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.webmanifest': 'application/manifest+json', '.json': 'application/json' };
-const ALLOWED = new Set(['/index.html', '/app.mjs', '/model.mjs', '/content.mjs', '/views.mjs', '/icons.mjs', '/style.css', '/sw.js', '/manifest.webmanifest', '/icon.svg', '/importers.mjs', '/cloud.mjs', '/vendor/pptxgen.bundle.js']);
+const TYPES = { '.html': 'text/html; charset=utf-8', '.mjs': 'text/javascript', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.webmanifest': 'application/manifest+json', '.json': 'application/json' };
+const ALLOWED = new Set(['/index.html', '/app.mjs', '/model.mjs', '/content.mjs', '/views.mjs', '/icons.mjs', '/style.css', '/sw.js', '/manifest.webmanifest', '/icon.svg', '/importers.mjs', '/cloud.mjs', '/icon-192.png', '/icon-512.png', '/icon-maskable-512.png', '/vendor/pptxgen.bundle.js']);
 
 const fakeProvider = async (url, init) => {
   const body = JSON.parse(init.body);
   const user = body.messages.at(-1).content;
   let text;
   if (/"slides"/.test(body.system)) text = '{"slides":[{"title":"פתיחה (בדיקה)","bullets":["נקודה ראשונה","נקודה שנייה"],"notes":"הערה"},{"title":"סיכום","bullets":["סוף"]}]}';
+  else if (/סיכום לימודי מסודר/.test(body.system)) text = '# נושא ראשון (בדיקה)\nהסבר קצר.\n- נקודה\n# מושגי מפתח\n- מושג: הגדרה';
   else if (/פודקאסט/.test(body.system)) text = '# פתיחה\nשלום וברוכים הבאים לפרק בדיקה.\n# סיכום\nזה הכול להיום.';
   else if (/<summary>/.test(user)) text = user.replace(/[\s\S]*<summary>\n|\n<\/summary>[\s\S]*/g, '').replace('מתקרבים', 'מתקרבים בקירוב') + '\n- נוסף סיכום קצר (תשובת בדיקה)';
   else if (/<source/.test(user)) text = '{"questions":[{"prompt":"מה מגדיר התפלגות נורמלית? (שאלת בדיקה)","answer":"ממוצע וסטיית תקן","source":1}]}';
