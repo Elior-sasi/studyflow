@@ -447,7 +447,7 @@ async function callLumi(body, code = aiCode()) {
   } catch { throw Error('לא ניתן להגיע לשרת של לומי.'); } finally { clearTimeout(timer); }
   const j = await r.json().catch(() => ({}));
   if (r.status === 401) { ui.ai.verified = false; try { localStorage.removeItem(AI_KEY); } catch {} }
-  if (!r.ok) throw Error(AI_ERRORS[j.error] || 'לומי לא הצליח לענות כרגע.');
+  if (!r.ok) throw Error((AI_ERRORS[j.error] || 'לומי לא הצליח לענות כרגע.') + (j.upstream ? ` (קוד ${j.upstream}${j.detail ? ': ' + j.detail : ''})` : ''));
   return j;
 }
 async function aiInit() {

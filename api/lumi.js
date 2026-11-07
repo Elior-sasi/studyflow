@@ -102,10 +102,13 @@ async function callProvider(provider, env, req, json, fetchImpl, signal) {
       body: JSON.stringify({
         systemInstruction: { parts: [{ text: req.system }] },
         contents: req.messages.map(m => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] })),
-        generationConfig: { maxOutputTokens: req.max_tokens * 2, temperature: 0.4, ...(json ? { responseMimeType: 'application/json' } : {}), ...(/flash/.test(model) ? { thinkingConfig: { thinkingBudget: 0 } } : {}) },
+        generationConfig: { maxOutputTokens: req.max_tokens * 2, temperature: 0.4, ...(json ? { responseMimeType: 'application/json' } : {}), ...(/^gemini-2\.5-flash/.test(model) ? { thinkingConfig: { thinkingBudget: 0 } } : {}) },
       }),
     });
-    if (!r.ok) return { ok: false, status: r.status };
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      return { ok: false, status: r.status, detail: [err.error?.status, err.error?.message].filter(Boolean).join(': ').replace(/AQ\.[\w.-]+|AIza[\w-]+/g, '[key]').slice(0, 240) };
+    }
     const data = await r.json();
     const text = (data.candidates?.[0]?.content?.parts || []).map(p => p.text || '').join('').trim();
     return { ok: true, text };
@@ -147,7 +150,7 @@ export function createHandler({ env, fetchImpl, now = () => Date.now() }) {
       const timer = setTimeout(() => controller.abort(), 45_000);
       try {
         const r = await callProvider(providerOf(env), env, req, body.mode === 'questions', fetchImpl, controller.signal);
-        if (!r.ok) return json(502, { error: r.status === 429 ? 'provider_busy' : 'provider_error' });
+        if (!r.ok) return json(502, { error: r.status === 429 ? 'provider_busy' : 'provider_error', upstream: r.status, detail: r.detail || '' });
         const out = r.text;
         if (!out) return json(502, { error: 'empty_response' });
         if (body.mode === 'questions') {

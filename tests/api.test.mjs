@@ -70,7 +70,7 @@ test('provider failures become generic errors', async () => {
   const h = createHandler({ env, fetchImpl: fakeFetch('x', 500) });
   const r = await h.POST(post(chat(), ipHeader()));
   assert.equal(r.status, 502);
-  assert.deepEqual(await r.json(), { error: 'provider_error' });
+  assert.deepEqual(await r.json(), { error: 'provider_error', upstream: 500, detail: '' });
   const down = createHandler({ env, fetchImpl: async () => { throw Error('network'); } });
   assert.equal((await down.POST(post(chat(), ipHeader()))).status, 504);
 });
@@ -110,5 +110,5 @@ test('Gemini provider: chosen automatically, key in header only, response parsed
   assert.equal(calls[1].body.generationConfig.responseMimeType, 'application/json');
   assert.equal(q.status, 502, 'non-JSON answer for questions is rejected');
   const failing = createHandler({ env: genv, fetchImpl: async () => new Response('{}', { status: 429 }) });
-  assert.deepEqual(await (await failing.POST(post(chat(), ipHeader()))).json(), { error: 'provider_busy' });
+  assert.deepEqual(await (await failing.POST(post(chat(), ipHeader()))).json(), { error: 'provider_busy', upstream: 429, detail: '' });
 });
