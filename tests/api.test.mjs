@@ -121,3 +121,11 @@ test('Gemini falls back to current model aliases when the primary is busy or ret
   assert.deepEqual(await r.json(), { text: 'עובד' });
   assert.deepEqual(seen, ['gemini-3.8-flash', 'gemini-flash-latest']);
 });
+
+test('answers with Arabic letters mixed into Hebrew are regenerated once', async () => {
+  let n = 0;
+  const f = async () => new Response(JSON.stringify({ content: [{ type: 'text', text: n++ ? 'תשובה תקינה' : 'לשؤالתך' }] }), { status: 200 });
+  const r = await createHandler({ env, fetchImpl: f }).POST(post(chat(), ipHeader()));
+  assert.deepEqual(await r.json(), { text: 'תשובה תקינה' });
+  assert.equal(n, 2);
+});
