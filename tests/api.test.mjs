@@ -101,7 +101,7 @@ test('Gemini provider: chosen automatically, key in header only, response parsed
   assert.deepEqual(await (await h.GET()).json(), { configured: true, provider: 'gemini' });
   const r = await h.POST(post(chat({ messages: [{ role: 'user', text: 'א' }, { role: 'assistant', text: 'ב' }, { role: 'user', text: 'ג' }] }), ipHeader()));
   assert.deepEqual(await r.json(), { text: 'תשובה מג׳מיני [1]' });
-  assert.match(calls[0].url, /generativelanguage\.googleapis\.com\/v1beta\/models\/gemini-2\.5-flash:generateContent$/);
+  assert.match(calls[0].url, /generativelanguage\.googleapis\.com\/v1beta\/models\/gemini-3\.8-flash:generateContent$/);
   assert.doesNotMatch(calls[0].url, /AIza/, 'key is never in the URL');
   assert.equal(calls[0].init.headers['x-goog-api-key'], 'AIza-secret');
   assert.deepEqual(calls[0].body.contents.map(c => c.role), ['user', 'model', 'user']);

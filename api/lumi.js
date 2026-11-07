@@ -94,7 +94,7 @@ export function providerOf(env) {
 /** Provider-specific request building and response parsing. Both return {ok, status, text}. */
 async function callProvider(provider, env, req, json, fetchImpl, signal) {
   if (provider === 'gemini') {
-    const model = env.LUMI_MODEL || 'gemini-2.5-flash';
+    const model = env.LUMI_MODEL || 'gemini-3.8-flash';
     const r = await fetchImpl(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
       method: 'POST',
       signal,

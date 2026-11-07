@@ -29,7 +29,7 @@ Set in Vercel → Project → Settings → Environment Variables (Production):
 | `ANTHROPIC_API_KEY` | Alternative provider: Claude. Server only. |
 | `LUMI_ACCESS_CODE` | A private code the user types once in "עוד". Prevents strangers from spending the key. Required. |
 | `LUMI_PROVIDER` (optional) | `gemini` or `anthropic` when both keys exist. |
-| `LUMI_MODEL` (optional) | Model id; defaults `gemini-2.5-flash` / `claude-sonnet-4-5`. |
+| `LUMI_MODEL` (optional) | Model id; defaults `gemini-3.8-flash` / `claude-sonnet-4-5`. |
 
 Note: on Gemini's free tier Google may use submitted content to improve its products.
 
