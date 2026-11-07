@@ -3,10 +3,12 @@ import * as M from './model.mjs';
 import { esc, speechText, diffWords, diffHTML, diffStats, retrieve } from './content.mjs';
 import { icon } from './icons.mjs';
 import * as V from './views.mjs';
+import { pptxToMarkdown } from './importers.mjs';
 
 const $ = id => document.getElementById(id);
 const KEY = 'studyflow-v2'; // storage key kept for continuity; the stored object carries its own schema version
 const AI_KEY = 'studyflow-lumi-code';
+const MOODLE_KEY = 'studyflow-moodle'; // {site, token, siteName, user}; never included in backups
 
 // ---------- Storage ----------
 let state = M.emptyState(), raw = null, locked = false, undoStack = [];
@@ -62,6 +64,7 @@ const ui = {
   chat: [], lumiBusy: false, lumiScope: '',
   ai: { configured: null, verified: false, reason: '' },
   speech: { noteId: null, playing: false, error: '' },
+  voice: { on: false, heard: '', error: '' },
 };
 let session = null;
 let toastTimer = 0;
@@ -96,12 +99,12 @@ function applySettings() {
 
 // ---------- Routing ----------
 const TABS = [['home', 'בית', 'home'], ['courses', 'קורסים', 'book'], ['plan', 'תוכנית', 'calendar'], ['progress', 'התקדמות', 'chart'], ['more', 'עוד', 'more']];
-const TAB_OF = { home: 'home', lumi: 'home', courses: 'courses', course: 'courses', lesson: 'courses', plan: 'plan', progress: 'progress', more: 'more', practice: 'more' };
+const TAB_OF = { home: 'home', lumi: 'home', courses: 'courses', course: 'courses', lesson: 'courses', plan: 'plan', progress: 'progress', more: 'more', practice: 'more', print: 'courses' };
 function route() {
   const [name, id = '', extra = ''] = decodeURIComponent(location.hash.slice(1)).split('/');
   return { name: TAB_OF[name] ? name : 'home', id, extra };
 }
-const TITLES = { home: 'בית', lumi: 'לומי', courses: 'הקורסים שלי', course: 'קורס', lesson: 'שיעור', plan: 'התוכנית שלי', progress: 'ההתקדמות שלי', more: 'עוד', practice: 'תרגול' };
+const TITLES = { home: 'בית', lumi: 'לומי', courses: 'הקורסים שלי', course: 'קורס', lesson: 'שיעור', plan: 'התוכנית שלי', progress: 'ההתקדמות שלי', more: 'עוד', practice: 'תרגול', print: 'הדפסה' };
 
 function renderNav() {
   const current = TAB_OF[route().name];
@@ -132,11 +135,11 @@ function render(focus = false) {
   if (r.name !== 'lesson' && ui.focus) { ui.focus = false; document.body.classList.remove('focus-mode'); }
   document.title = `${TITLES[r.name]} · StudyFlow`;
   renderNav();
-  const env = { bytes: new Blob([raw || '']).size, canUndo: undoStack.length > 0 };
+  const env = { bytes: new Blob([raw || '']).size, canUndo: undoStack.length > 0, moodle: moodleConn() };
   const view = {
     home: () => V.home(state, ui), lumi: () => V.lumiView(state, ui), courses: () => V.courses(state, ui),
     course: () => V.courseDetail(state, ui, r.id), lesson: () => V.lesson(state, ui, r.id), plan: () => V.plan(state, ui),
-    progress: () => V.progress(state, ui), more: () => V.more(state, ui, env), practice: () => V.practice(state, ui),
+    progress: () => V.progress(state, ui), print: () => V.printView(state, ui, r.id), more: () => V.more(state, ui, env), practice: () => V.practice(state, ui),
   }[r.name];
   $('main').innerHTML = view();
   renderTimer();
@@ -205,9 +208,11 @@ function editNote(courseId, id) {
     `<label for="f-title">כותרת</label><input id="f-title" name="title" required maxlength="200" value="${esc(n?.title)}">
     <label for="f-text">תוכן הסיכום</label><textarea id="f-text" name="text" rows="12" required maxlength="200000" aria-describedby="text-hint">${esc(n?.text)}</textarea>
     <p class="hint" id="text-hint">שורה שמתחילה ב-"# " פותחת כרטיס חדש במצגת. "- " יוצר נקודה, ו-**טקסט** מודגש.</p>
-    <label for="note-import">או ייבוא טקסט מקובץ TXT / Markdown (עד 200 KB)</label><input id="note-import" type="file" accept=".txt,.md,text/plain,text/markdown">`,
+    <label for="note-import">או ייבוא מקובץ: מצגת PowerPoint, TXT או Markdown</label><input id="note-import" type="file" accept=".pptx,.txt,.md,text/plain,text/markdown,application/vnd.openxmlformats-officedocument.presentationml.presentation">
+    <p class="hint">ממצגת PowerPoint נלקחים הכותרות, הנקודות והערות המרצה - כל שקופית הופכת לכרטיס. תמונות וגרפים לא מיובאים.</p>
+    <input type="hidden" name="kind" id="f-kind-note" value="${esc(n?.kind || 'summary')}">`,
   f => {
-    const v = { id: n?.id || M.uid(), courseId: f.get('courseId'), title: f.get('title').trim(), text: f.get('text').trim(), updatedAt: new Date().toISOString(), position: n && n.text === f.get('text').trim() ? n.position : 0 };
+    const v = { id: n?.id || M.uid(), courseId: f.get('courseId'), title: f.get('title').trim(), text: f.get('text').trim(), updatedAt: new Date().toISOString(), position: n && n.text === f.get('text').trim() ? n.position : 0, kind: ['summary', 'slides', 'podcast', 'import'].includes(f.get('kind')) ? f.get('kind') : 'summary' };
     if (!v.title || !v.text) throw Error('יש להזין כותרת ותוכן.');
     commit(d => {
       if (n) {
@@ -693,6 +698,37 @@ const actions = {
     status(v ? `קול: ${v.name}` : 'מנסה להקריא בעברית עם קול ברירת המחדל.');
   },
   'weekly-report': () => download(M.weeklyReport(state), 'studyflow-week-' + M.today() + '.txt', 'text/plain;charset=utf-8'),
+  'export-pptx': async id => {
+    const n = state.notes.find(x => x.id === id);
+    if (!n) return;
+    status('מכין קובץ PowerPoint…');
+    await exportPptx(n);
+  },
+  print: () => window.print(),
+  'ai-slides': async id => {
+    const n = state.notes.find(x => x.id === id);
+    if (!n) return;
+    status('לומי בונה מצגת מהסיכום…');
+    const j = await callLumi({ mode: 'slides', title: n.title, text: n.text.slice(0, 30000) });
+    const v = { id: M.uid(), courseId: n.courseId, title: ('מצגת: ' + n.title).slice(0, 200), text: M.slidesToMarkdown(j.slides), updatedAt: new Date().toISOString(), position: 0, kind: 'slides' };
+    commit(d => { d.notes.push(v); });
+    location.hash = 'lesson/' + v.id;
+    status(`נוצרה מצגת של ${j.slides.length} שקופיות. אפשר לערוך אותה או לייצא ל-PowerPoint.`, { undo: true });
+  },
+  'ai-podcast': async id => {
+    const n = state.notes.find(x => x.id === id);
+    if (!n) return;
+    status('לומי כותב פרק פודקאסט… זה יכול לקחת כחצי דקה.');
+    const j = await callLumi({ mode: 'podcast', title: n.title, text: n.text.slice(0, 30000) });
+    const v = { id: M.uid(), courseId: n.courseId, title: ('פודקאסט: ' + n.title).slice(0, 200), text: j.text.slice(0, 200000), updatedAt: new Date().toISOString(), position: 0, kind: 'podcast' };
+    commit(d => { d.notes.push(v); d.settings.continuous = true; });
+    location.hash = 'lesson/' + v.id;
+    status('הפודקאסט מוכן. לוחצים על הקראה; האזנה רציפה הופעלה.', { undo: true });
+  },
+  'voice-toggle': () => toggleVoice(),
+  'moodle-connect': () => moodleConnect(),
+  'moodle-sync': () => moodleSync(),
+  'moodle-forget': () => { if (!confirm('לנתק את Moodle מהדפדפן הזה? הקורסים והמשימות שיובאו נשארים.')) return; try { localStorage.removeItem(MOODLE_KEY); } catch {} render(); status('Moodle נותק.'); },
   'export-ics': () => { download(M.toICS(state), 'studyflow-' + M.today() + '.ics', 'text/calendar;charset=utf-8'); status('קובץ היומן מוכן. פותחים אותו כדי להוסיף את המועדים ליומן.'); },
   export: exportBackup,
   'export-raw': () => { const get = k => { try { return localStorage.getItem(k); } catch { return null; } }; download(JSON.stringify({ current: get(KEY), previousSchema: get(KEY + '-pre-v3'), legacy: get('studyflow'), recovery: get(KEY + '-recovery') }, null, 2), 'studyflow-original-data.json'); status('עותק נתוני המקור הוכן להורדה.'); },
@@ -701,7 +737,7 @@ const actions = {
   'delete-all': () => {
     if (!confirm('למחוק את כל הנתונים מהמכשיר: קורסים, סיכומים, קבצים, משימות והתקדמות? מומלץ לייצא גיבוי קודם.')) return;
     if (!confirm('אישור אחרון: המחיקה סופית ולא ניתן לבטל אותה.')) return;
-    for (const k of [KEY, KEY + '-pre-v3', KEY + '-recovery', 'studyflow', AI_KEY]) try { localStorage.removeItem(k); } catch {}
+    for (const k of [KEY, KEY + '-pre-v3', KEY + '-recovery', 'studyflow', AI_KEY, MOODLE_KEY]) try { localStorage.removeItem(k); } catch {}
     state = M.emptyState(); raw = null; locked = false; undoStack = []; session = null; ui.chat = []; ui.quiz = null; ui.ai.verified = false;
     $('storage-error').hidden = true;
     applySettings(); location.hash = 'home'; render(true);
@@ -717,6 +753,147 @@ function undo() {
   ui.quiz = null;
   render();
   status('השינוי האחרון בוטל.');
+}
+
+// ---------- PowerPoint export (vendored pptxgenjs, loaded only when needed) ----------
+function loadScript(src) {
+  return new Promise((res, rej) => {
+    if (window.PptxGenJS) return res();
+    const sc = document.createElement('script');
+    sc.src = src; sc.onload = res; sc.onerror = () => rej(Error('לא ניתן לטעון את רכיב הייצוא. צריך חיבור לרשת.'));
+    document.head.append(sc);
+  });
+}
+async function exportPptx(n) {
+  await loadScript('/vendor/pptxgen.bundle.js');
+  const pptx = new window.PptxGenJS();
+  pptx.layout = 'LAYOUT_WIDE';
+  pptx.rtlMode = true;
+  pptx.title = n.title;
+  const courseName = state.courses.find(c => c.id === n.courseId)?.name || '';
+  const font = 'Arial';
+  const cover = pptx.addSlide();
+  cover.background = { color: '0B1233' };
+  cover.addText(n.title, { x: 0.6, y: 2.2, w: 12.1, h: 1.4, fontFace: font, fontSize: 40, bold: true, color: 'FFFFFF', align: 'right', rtlMode: true });
+  cover.addText(courseName, { x: 0.6, y: 3.7, w: 12.1, h: 0.8, fontFace: font, fontSize: 22, color: 'B9C3E3', align: 'right', rtlMode: true });
+  for (const card of M.noteCards(n)) {
+    const sl = pptx.addSlide();
+    sl.background = { color: 'FFFFFF' };
+    sl.addShape(pptx.ShapeType.rect, { x: 0, y: 0, w: 13.33, h: 0.18, fill: { color: '7B93FF' } });
+    sl.addText(card.title || n.title, { x: 0.6, y: 0.4, w: 12.1, h: 1, fontFace: font, fontSize: 30, bold: true, color: '0B1330', align: 'right', rtlMode: true });
+    const lines = card.body.split('\n').filter(l => l.trim());
+    const notes = [];
+    const runs = [];
+    for (const l of lines) {
+      if (/^הערות המרצה:/.test(l)) { notes.push(l.replace(/^הערות המרצה:\s*/, '')); continue; }
+      const m = /^(\s*)[-*•]\s+(.*)$/.exec(l);
+      const text = (m ? m[2] : l).replace(/\*\*/g, '');
+      runs.push({ text, options: { bullet: !!m, indentLevel: m ? Math.min(2, Math.floor(m[1].length / 2)) : 0, breakLine: true } });
+    }
+    if (runs.length) sl.addText(runs, { x: 0.6, y: 1.5, w: 12.1, h: 5.6, fontFace: font, fontSize: runs.length > 7 ? 18 : 22, color: '1A2240', align: 'right', valign: 'top', rtlMode: true, paraSpaceAfter: 8 });
+    if (notes.length) sl.addNotes(notes.join('\n'));
+  }
+  const blob = await pptx.write({ outputType: 'blob' });
+  download(blob, (n.title.replace(/[\\/:*?"<>|]/g, '').slice(0, 80) || 'studyflow') + '.pptx', 'application/vnd.openxmlformats-officedocument.presentationml.presentation');
+  status('קובץ PowerPoint מוכן להורדה.');
+}
+
+// ---------- Voice commands (Web Speech recognition, Hebrew) ----------
+let rec = null;
+const VOICE = [
+  [/הבא|קדימה|הלאה/, 'card-next'], [/הקודם|אחורה|חזור/, 'card-prev'], [/עצור|השהה|הפסק|שקט/, 'speech-pause'],
+  [/הקרא|נגן|המשך|תקריא/, 'speech-play'], [/סמן|נקרא/, 'toggle-read'], [/מהר/, 'faster'], [/לאט/, 'slower'], [/סיום|סגור|די/, 'voice-stop'],
+];
+function stopVoice() { if (rec) { ui.voice.on = false; try { rec.stop(); } catch {} rec = null; } }
+function toggleVoice() {
+  if (ui.voice.on) { stopVoice(); render(); status('הפקודות הקוליות כבויות.'); return; }
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { ui.voice.error = 'הדפדפן הזה לא תומך בזיהוי דיבור. בכרום ובספארי העדכניים זה זמין.'; render(); return; }
+  rec = new SR();
+  rec.lang = 'he-IL'; rec.continuous = true; rec.interimResults = false;
+  rec.onresult = e => {
+    const said = e.results[e.results.length - 1][0].transcript.trim();
+    ui.voice.heard = said;
+    const hit = VOICE.find(([re]) => re.test(said));
+    if (!hit) { render(); return; }
+    const cmd = hit[1];
+    act(() => {
+      if (cmd === 'voice-stop') { stopVoice(); render(); status('הפקודות הקוליות כבויות.'); return; }
+      if (cmd === 'faster' || cmd === 'slower') {
+        const rates = [0.75, 0.9, 1, 1.25, 1.5], i = rates.indexOf(state.settings.speechRate);
+        const v = rates[Math.max(0, Math.min(rates.length - 1, (i < 0 ? 2 : i) + (cmd === 'faster' ? 1 : -1)))];
+        commit(d => { d.settings.speechRate = v; }, { undo: false });
+        if (ui.speech.playing) speakCard(true);
+        render(); status(`מהירות ${v}`); return;
+      }
+      actions[cmd]();
+    });
+  };
+  rec.onerror = e => {
+    if (e.error === 'no-speech' || e.error === 'aborted') return;
+    ui.voice.error = e.error === 'not-allowed' ? 'אין הרשאה למיקרופון. אפשר לאשר בהגדרות האתר.' : 'זיהוי הדיבור נעצר (' + e.error + ').';
+    stopVoice(); render();
+  };
+  rec.onend = () => { if (ui.voice.on && rec) { try { rec.start(); } catch {} } };
+  try { rec.start(); } catch { ui.voice.error = 'לא ניתן להפעיל את המיקרופון.'; render(); return; }
+  ui.voice = { on: true, heard: '', error: '' };
+  render();
+  status('מקשיב לפקודות קוליות.');
+}
+
+// ---------- Moodle ----------
+function moodleConn() { try { return JSON.parse(localStorage.getItem(MOODLE_KEY) || 'null'); } catch { return null; } }
+const MOODLE_ERRORS = { bad_site: 'הכתובת לא תקינה. צריך כתובת https של אתר ה-Moodle, למשל https://moodle.example.ac.il', unreachable: 'לא הצלחתי להגיע לאתר. כדאי לבדוק את הכתובת.', redirected: 'האתר הפנה לכתובת אחרת. כדאי להזין את הכתובת הסופית של ה-Moodle.', not_moodle: 'הכתובת לא נראית כמו אתר Moodle, או שהשירות לנייד חסום.', login_failed: 'שם המשתמש או הסיסמה שגויים. אם המוסד נכנס דרך Google או Microsoft, צריך להשתמש במפתח (token).', service_disabled: 'המוסד לא מאפשר חיבור מאפליקציות. אפשר לנסות עם מפתח (token).', invalid_token: 'מפתח הגישה ל-Moodle לא תקף יותר. צריך להתחבר מחדש.', rate_limited: 'יותר מדי ניסיונות. כדאי לנסות שוב בעוד כמה דקות.', moodle_error: 'Moodle החזיר שגיאה.' };
+async function moodleCall(body) {
+  if (!navigator.onLine) throw Error('אין חיבור לרשת.');
+  let r;
+  try { r = await fetch('/api/moodle', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }); } catch { throw Error('לא ניתן להגיע לשרת.'); }
+  const j = await r.json().catch(() => ({}));
+  if (r.status === 401 && j.error === 'invalid_token') { try { localStorage.removeItem(MOODLE_KEY); } catch {} }
+  if (!r.ok) throw Error((MOODLE_ERRORS[j.error] || 'החיבור ל-Moodle נכשל.') + (j.message ? ` (${j.message})` : ''));
+  return j;
+}
+function moodleConnect() {
+  openEditor('חיבור ל-Moodle', `<p>מזינים את כתובת ה-Moodle של המוסד ואת פרטי הכניסה. הסיסמה נשלחת פעם אחת ל-Moodle דרך השרת כדי לקבל מפתח גישה, ולא נשמרת בשום מקום.</p>
+    <label for="m-site">כתובת האתר</label><input id="m-site" name="site" type="url" inputmode="url" dir="ltr" required placeholder="https://moodle.example.ac.il" maxlength="300">
+    <label for="m-user">שם משתמש</label><input id="m-user" name="username" autocomplete="username" dir="ltr" maxlength="200">
+    <label for="m-pass">סיסמה</label><input id="m-pass" name="password" type="password" autocomplete="current-password" maxlength="300">
+    <details><summary>המוסד נכנס דרך Google / Microsoft? אפשר מפתח (token)</summary><p class="hint">ב-Moodle: תפריט המשתמש > העדפות > מפתחות אבטחה (Security keys) > מעתיקים את המפתח של "Moodle mobile web service". לא בכל מוסד זה זמין.</p><label for="m-token">מפתח גישה (token)</label><input id="m-token" name="token" dir="ltr" autocomplete="off" maxlength="200"></details>`,
+  async f => {
+    const site = f.get('site').trim(), token = f.get('token').trim();
+    let conn;
+    if (token) {
+      const j = await moodleCall({ action: 'sync', site, token });
+      conn = { site: j.site, token, siteName: j.siteName, user: '' };
+    } else {
+      if (!f.get('username').trim() || !f.get('password')) throw Error('יש להזין שם משתמש וסיסמה, או מפתח גישה.');
+      const j = await moodleCall({ action: 'token', site, username: f.get('username').trim(), password: f.get('password') });
+      conn = { site: j.site, token: j.token, siteName: j.siteName, user: j.user };
+    }
+    try { localStorage.setItem(MOODLE_KEY, JSON.stringify(conn)); } catch { throw Error('לא ניתן לשמור את החיבור בדפדפן.'); }
+    setTimeout(() => act(moodleSync), 50);
+    return `מחובר ל-${conn.siteName || 'Moodle'}. עכשיו בוחרים מה לייבא.`;
+  }, { submitLabel: 'התחברות' });
+}
+async function moodleSync() {
+  const conn = moodleConn();
+  if (!conn) return moodleConnect();
+  status('מושך קורסים ומועדים מ-Moodle…');
+  const snap = await moodleCall({ action: 'sync', site: conn.site, token: conn.token });
+  if (!snap.courses.length) { status('לא נמצאו קורסים פעילים בחשבון ה-Moodle.'); return; }
+  const host = new URL(snap.site).host, t = M.today();
+  const known = new Set(state.tasks.map(x => x.ext).filter(Boolean));
+  const byCourse = c => snap.items.filter(i => i.courseId === c.id).sort((a, b) => (a.due || '9999').localeCompare(b.due || '9999'));
+  openEditor('ייבוא מ-' + (snap.siteName || 'Moodle'), `<p>מסמנים מה לייבא. קורסים קיימים לא ייווצרו פעמיים, ומועדים שהשתנו יתעדכנו.</p>
+    ${snap.courses.map(c => { const items = byCourse(c), exists = state.courses.some(x => x.ext === `moodle:${host}:course:${c.id}`); return `<fieldset><legend><label class="check" style="margin:0"><input type="checkbox" name="course" value="${esc(String(c.id))}" ${exists || items.some(i => !i.due || i.due >= t) ? 'checked' : ''}> ${esc(c.fullname)}${exists ? ' <span class="badge ok">קיים</span>' : ''}</label></legend>
+      ${items.length ? items.map(i => `<label class="check"><input type="checkbox" name="item" value="${esc(i.id)}" ${!i.due || i.due >= t ? 'checked' : ''}> ${esc(i.name)} · ${esc(i.kind || '')} ${i.due ? '· ' + esc(V.fmtDate(i.due, { day: 'numeric', month: 'numeric', year: '2-digit' })) : '· ללא מועד'}${known.has(`moodle:${host}:item:${i.id}`) ? ' <span class="badge">קיים</span>' : ''}</label>`).join('') : '<p class="muted small">אין מטלות עם מועד.</p>'}</fieldset>`; }).join('')}`,
+  f => {
+    const pick = { courses: new Set(f.getAll('course')), items: new Set(f.getAll('item')) };
+    if (!pick.courses.size) throw Error('לא נבחר אף קורס.');
+    let res;
+    commit(d => { res = M.mergeMoodle(d, snap, pick); return res.state; });
+    return `יובאו ${res.addedCourses} קורסים ו-${res.addedTasks} מטלות. ${res.updatedTasks ? res.updatedTasks + ' מועדים עודכנו.' : ''}`;
+  }, { submitLabel: 'ייבוא הנבחרים' });
 }
 
 // ---------- Events ----------
@@ -781,8 +958,19 @@ document.addEventListener('change', async e => {
     if (el.id === 'note-import') {
       const f = el.files[0];
       if (!f) return;
+      if (/\.pptx$/i.test(f.name)) {
+        if (f.size > 60_000_000) throw Error('המצגת גדולה מ-60 MB.');
+        $('form-error').textContent = 'קורא את המצגת…';
+        const r = await pptxToMarkdown(await f.arrayBuffer());
+        $('f-text').value = r.markdown.slice(0, 200000);
+        $('f-kind-note').value = 'import';
+        if (!$('f-title').value) $('f-title').value = f.name.replace(/\.[^.]+$/, '');
+        $('form-error').textContent = '';
+        status(`יובאו ${r.slides} שקופיות. אפשר לעבור על הטקסט לפני השמירה.`);
+        return;
+      }
       if (f.size > 200_000) throw Error('הקובץ גדול מ-200 KB.');
-      if (!/\.(txt|md)$/i.test(f.name)) throw Error('יש לבחור קובץ TXT או Markdown.');
+      if (!/\.(txt|md)$/i.test(f.name)) throw Error('יש לבחור מצגת PowerPoint, קובץ TXT או Markdown.');
       $('f-text').value = await f.text();
       if (!$('f-title').value) $('f-title').value = f.name.replace(/\.[^.]+$/, '');
       $('form-error').textContent = '';
@@ -805,7 +993,7 @@ $('undo').onclick = () => act(undo);
 $('close-editor').onclick = closeEditor;
 $('cancel-editor').onclick = closeEditor;
 $('editor').addEventListener('close', () => { $('editor-submit').hidden = false; });
-window.addEventListener('hashchange', () => { stopSpeech(); if (route().name !== 'lesson') ui.lessonNote = ''; render(true); });
+window.addEventListener('hashchange', () => { stopSpeech(); if (route().name !== 'lesson') stopVoice(); if (route().name !== 'lesson') ui.lessonNote = ''; render(true); });
 window.addEventListener('storage', e => {
   if (e.key !== KEY) return;
   try {

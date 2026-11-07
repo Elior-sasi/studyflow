@@ -1,12 +1,12 @@
 {
   "name": "studyflow",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "private": true,
   "type": "module",
   "scripts": {
     "test": "node --test tests/*.test.mjs",
     "e2e": "node --test --test-concurrency=1 tests/e2e/*.test.mjs",
-    "check": "for f in app.mjs model.mjs content.mjs views.mjs icons.mjs sw.js api/lumi.js scripts/dev-server.mjs; do node --check $f || exit 1; done",
+    "check": "for f in app.mjs model.mjs content.mjs views.mjs icons.mjs importers.mjs sw.js api/lumi.js api/moodle.js scripts/dev-server.mjs; do node --check $f || exit 1; done",
     "dev": "node scripts/dev-server.mjs",
     "dev:mock": "node scripts/dev-server.mjs --mock-ai"
   },

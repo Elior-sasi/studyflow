@@ -186,10 +186,14 @@ export function lesson(st, ui, noteId) {
         ${btn(`${st.settings.speechRate}×`, 'speech-rate', '', '', `aria-label="מהירות הקראה ${st.settings.speechRate}. לחיצה משנה את המהירות"`)}
       </div>
       <label class="check"><input type="checkbox" id="continuous" ${st.settings.continuous ? 'checked' : ''}> האזנה רציפה - מעבר אוטומטי לכרטיס הבא (מתאים לנסיעה או לאימון)</label>
-      <div class="actions">${btn(icon('check') + (read.has(card.id) ? ' סימון כלא נקרא' : ' סימון כנקרא'), 'toggle-read', '', '')}${btn(icon('focus') + (ui.focus ? ' יציאה ממצב מיקוד' : ' מצב מיקוד'), 'focus-mode', '', '', `aria-pressed="${ui.focus}"`)}</div>
+      <div class="actions">${btn(icon('check') + (read.has(card.id) ? ' סימון כלא נקרא' : ' סימון כנקרא'), 'toggle-read', '', '')}${btn(icon('focus') + (ui.focus ? ' יציאה ממצב מיקוד' : ' מצב מיקוד'), 'focus-mode', '', '', `aria-pressed="${ui.focus}"`)}${btn(icon('mic') + (ui.voice.on ? ' הפסקת פקודות קוליות' : ' פקודות קוליות'), 'voice-toggle', '', ui.voice.on ? 'primary' : '', `aria-pressed="${ui.voice.on}"`)}</div>
+      ${ui.voice.on ? `<p class="small" role="status">מקשיב. אפשר לומר: "הבא", "הקודם", "הקרא", "עצור", "מהר יותר", "לאט יותר", "סמן כנקרא", "סיום". ${ui.voice.heard ? 'שמעתי: ' + esc(ui.voice.heard) : ''}</p>` : ui.voice.error ? `<p class="small error">${esc(ui.voice.error)}</p>` : ''}
     </section>`;
   } else if (tab === 'text') {
     body = `<section class="card"><div class="actions">${btn(icon('edit') + ' עריכה', 'edit-note-existing', n.id)}${btn(icon('sparkle') + ' הצעת שינויים ובדיקה', 'review-note', n.id)}${ui.ai.verified ? btn(icon('sparkle') + ' לומי: הצעת שיפור', 'ai-improve', n.id, 'primary') : ''}${btn('גרסאות קודמות', 'note-versions', n.id)}${btn(icon('trash') + ' מחיקה', 'delete-note', n.id, 'danger')}</div>
+      <h2 class="small" style="margin:.6rem 0 .2rem">ייצוא ויצירה</h2>
+      <div class="actions">${btn(icon('download') + ' ייצוא PowerPoint', 'export-pptx', n.id)}${btn(icon('doc') + ' הדפסה / PDF', 'go', '#print/' + n.id)}${ui.ai.verified ? btn(icon('sparkle') + ' לומי: יצירת מצגת', 'ai-slides', n.id) + btn(icon('headphones') + ' לומי: יצירת פודקאסט', 'ai-podcast', n.id) : ''}</div>
+      ${ui.ai.verified ? '' : '<p class="hint">יצירת מצגת ופודקאסט מהסיכום זמינה כשלומי AI מחובר.</p>'}
       <p class="muted small">עודכן ${new Date(n.updatedAt).toLocaleString('he-IL')} · ${n.versions?.length || 0} גרסאות שמורות. שינוי מוצע אף פעם לא מחליף את הסיכום בלי אישור.</p></section>
       <article class="card" aria-label="הסיכום המלא">${cards.map((cd, i) => `<h2 style="margin-top:${i ? '1.2rem' : 0}">${esc(cd.title || n.title)}</h2>${formatBody(cd.body)}`).join('')}</article>`;
   } else {
@@ -198,7 +202,8 @@ export function lesson(st, ui, noteId) {
     <section class="card"><h2>שאלות חזרה בקורס</h2><p>${qs.length ? `${qs.length} שאלות · ${reviewQueue(st, n.courseId).length} ממתינות היום` : 'אין עדיין שאלות לקורס הזה.'}</p>
     <div class="actions">${qs.length ? btn(icon('repeat') + ' תרגול עכשיו', 'start-quiz', n.courseId, 'primary') : ''}${btn(icon('plus') + ' שאלה מהכרטיס', 'edit-question', n.courseId)}${ui.ai.verified ? btn(icon('sparkle') + ' לומי: הצעת שאלות מהכרטיס', 'ai-questions', n.id) : ''}</div></section>`;
   }
-  return `${head(`למידה - ${esc(c?.name || '')}`, { back: '#course/' + esc(n.courseId), sub: esc(n.title) })}
+  const kindLabel = { slides: 'מצגת שלומי יצר', podcast: 'פודקאסט שלומי כתב', import: 'יובא מקובץ' }[n.kind];
+  return `${head(`למידה - ${esc(c?.name || '')}`, { back: '#course/' + esc(n.courseId), sub: esc(n.title) + (kindLabel ? ` · <span class="badge">${kindLabel}</span>` : '') })}
   ${seg('תצוגת השיעור', 'lesson-tab', [['slides', 'מצגת'], ['text', 'סיכום'], ['quiz', 'שאלות']], tab)}${body}`;
 }
 
@@ -333,7 +338,8 @@ export function more(st, ui, env) {
 
   <section class="card" aria-labelledby="int-h"><h2 id="int-h">חיבורים</h2>
     <div class="integration"><div><b>יומן (קובץ ICS)</b><p class="muted small" style="margin:0">ייצוא מועדי הגשה, מבחנים וימי למידה, עם תזכורת יום לפני. נפתח ביומן של אייפון, Google ו-Outlook.</p></div>${btn(icon('download') + ' ייצוא', 'export-ics')}</div>
-    ${[['Google Drive', 'ייבוא סיכומים וקבצים מתיקייה שבוחרים.'], ['Google Calendar', 'סנכרון דו-כיווני של מועדים.'], ['Moodle', 'משיכת קורסים ומטלות מהמוסד.']].map(([n, d]) => `<div class="integration"><div><b>${n}</b> <span class="badge">לא מחובר</span><p class="muted small" style="margin:0">${d} דורש הגדרת OAuth בשרת והרשאה מפורשת שלך - עוד לא זמין.</p></div><button type="button" disabled aria-disabled="true">טרם זמין</button></div>`).join('')}
+    <div class="integration"><div><b>Moodle</b> ${env.moodle ? `<span class="badge ok">מחובר</span>` : '<span class="badge">לא מחובר</span>'}<p class="muted small" style="margin:0">${env.moodle ? `${esc(env.moodle.siteName || env.moodle.site)}${env.moodle.user ? ' · ' + esc(env.moodle.user) : ''}. מייבא קורסים ומועדי הגשה לפי בחירה.` : 'כל מוסד שמאפשר את אפליקציית Moodle לנייד. הסיסמה לא נשמרת - רק מפתח גישה, בדפדפן הזה בלבד.'}</p></div><div class="actions" style="margin:0">${env.moodle ? btn(icon('repeat') + ' סנכרון', 'moodle-sync', '', 'primary') + btn('ניתוק', 'moodle-forget', '', 'danger') : btn('חיבור', 'moodle-connect', '', 'primary')}</div></div>
+    ${[['Google Drive', 'ייבוא סיכומים וקבצים מתיקייה שבוחרים.'], ['Google Calendar', 'סנכרון דו-כיווני של מועדים.']].map(([n, d]) => `<div class="integration"><div><b>${n}</b> <span class="badge">לא מחובר</span><p class="muted small" style="margin:0">${d} בהקמה - דורש התחברות עם Google.</p></div><button type="button" disabled aria-disabled="true">טרם זמין</button></div>`).join('')}
   </section>
 
   <section class="card" aria-labelledby="data-h"><h2 id="data-h">נתונים, גיבוי ופרטיות</h2>
@@ -342,7 +348,7 @@ export function more(st, ui, env) {
     <label for="backup-file">ייבוא גיבוי (מחליף את הנתונים אחרי בדיקה ואישור)</label><input id="backup-file" type="file" accept=".json,application/json">
     <div class="actions">${btn('ביטול השינוי האחרון', 'undo', '', '', env.canUndo ? '' : 'disabled')}${btn(icon('trash') + ' מחיקת כל הנתונים', 'delete-all', '', 'danger')}</div>
   </section>
-  <p class="muted small">StudyFlow 0.3.1 · בטא מקומית. ${ai.verified ? 'לומי AI מחובר דרך השרת.' : 'אין AI מחובר.'} אין סנכרון ענן. קבצי PDF ותמונות נשמרים להורדה בלבד.</p>`;
+  <p class="muted small">StudyFlow 0.4 · בטא מקומית. ${ai.verified ? 'לומי AI מחובר דרך השרת.' : 'אין AI מחובר.'} אין סנכרון ענן. קבצי PDF ותמונות נשמרים להורדה בלבד.</p>`;
 }
 
 // ---------- Editor bodies ----------
@@ -367,3 +373,13 @@ export function reviewFields(original, proposed, source) {
   <input type="hidden" name="source" value="${esc(source)}"><input type="hidden" name="original" value="${esc(original)}">`;
 }
 export { diffHTML, weeklyReport };
+
+// ---------- Print / PDF ----------
+export function printView(st, ui, noteId) {
+  const n = st.notes.find(x => x.id === noteId);
+  if (!n) return notFound('הסיכום לא נמצא.');
+  const c = course(st, n.courseId), cards = noteCards(n);
+  return `<div class="hide-print page-head"><a class="button icon-btn ghost" href="#lesson/${esc(n.id)}" aria-label="חזרה לשיעור">${icon('back')}</a><div style="flex:1"><h1 tabindex="-1">הדפסה / PDF</h1><p class="muted lead">${esc(n.title)} · ${cards.length} עמודים. בחלון ההדפסה בוחרים "שמירה כ-PDF".</p></div></div>
+  <div class="actions hide-print">${btn(icon('doc') + ' הדפסה / שמירה כ-PDF', 'print', '', 'primary')}</div>
+  <div class="print-deck">${cards.map((cd, i) => `<section class="print-slide" aria-label="עמוד ${i + 1}"><p class="print-meta">${esc(c?.name || '')} · ${esc(n.title)} · ${i + 1}/${cards.length}</p><h2>${esc(cd.title || n.title)}</h2>${formatBody(cd.body)}</section>`).join('')}</div>`;
+}

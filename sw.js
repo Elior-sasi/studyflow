@@ -1,5 +1,5 @@
-const CACHE='studyflow-shell-v8';
-const CORE=['/','/index.html','/app.mjs','/model.mjs','/content.mjs','/views.mjs','/icons.mjs','/style.css','/manifest.webmanifest','/icon.svg'];
+const CACHE='studyflow-shell-v9';
+const CORE=['/','/index.html','/app.mjs','/model.mjs','/content.mjs','/views.mjs','/icons.mjs','/importers.mjs','/style.css','/manifest.webmanifest','/icon.svg'];
 self.addEventListener('install',event=>{event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(CORE)).then(()=>self.skipWaiting()))});
 self.addEventListener('activate',event=>{event.waitUntil(Promise.all([caches.keys().then(keys=>Promise.all(keys.filter(key=>key.startsWith('studyflow-')&&key!==CACHE).map(key=>caches.delete(key)))),self.clients.claim()]))});
 self.addEventListener('fetch',event=>{const request=event.request,url=new URL(request.url);if(request.method!=='GET'||url.origin!==self.location.origin||url.pathname.startsWith('/api/')||(!CORE.includes(url.pathname)&&request.mode!=='navigate'))return;event.respondWith((async()=>{const cache=await caches.open(CACHE);if(request.mode==='navigate')return await cache.match('/index.html')||fetch(request);return await cache.match(url.pathname)||fetch(request)})())});

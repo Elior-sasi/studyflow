@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.0 - 2026-11-08
+
+- **Moodle for any institution** (`api/moodle.js`): sign in with site URL + username/password (exchanged once for a mobile-service token; the password is never stored) or paste a token for SSO sites. Choose which courses and deadlines to import; re-sync updates changed dates without duplicates. SSRF guarded (https, public addresses only, no redirects, limits).
+- **PowerPoint import**: lecturer `.pptx` files become lessons - one card per slide, bullet levels, tables and speaker notes (linked via slide relationships). Runs in the browser, no third-party code.
+- **PowerPoint export** of any lesson (vendored pptxgenjs 3.12, MIT, loaded only on demand; RTL text) and **print / PDF** view with one page per card.
+- **Lumi creates a presentation** (structured slides JSON) and **a podcast script** from a summary; both are saved as new lessons, never overwriting the source.
+- **Voice commands** in the lesson player (Hebrew Web Speech recognition where the browser supports it): next, previous, read, stop, faster, slower, mark read, finish.
+- Notes record their kind (summary, slides, podcast, import); courses/tasks keep an external id for re-sync.
+
 ## 0.3.2 - 2026-11-08
 
 - Gemini default model `gemini-3.8-flash` (2.5-flash is retired for new users), automatic fallback to `gemini-flash-latest` and `gemini-flash-lite-latest` on busy (503/429) or retired (404) models, with short retries.

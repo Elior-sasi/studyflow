@@ -189,6 +189,78 @@ test('AI proposals never overwrite without approval', async () => {
   assert.match(await page.locator('#status').innerText(), /1 שאלות נוספו/);
 });
 
+test('PowerPoint import, PowerPoint export and print view', async () => {
+  await go('courses');
+  await page.getByRole('button', { name: 'הכל' }).click();
+  await page.locator('a.row-link', { hasText: 'סטטיסטיקה' }).first().click();
+  await page.getByRole('button', { name: 'סיכום' }).first().click();
+  await page.locator('#note-import').setInputFiles(new URL('../fixtures/sample.pptx', import.meta.url).pathname);
+  await page.waitForFunction(() => document.getElementById('f-text').value.includes('# התפלגות נורמלית'));
+  assert.equal(await page.getByLabel('כותרת').inputValue(), 'sample');
+  await save();
+  await page.waitForURL(/#lesson\//);
+  assert.match(await main().innerText(), /כרטיס 1 מתוך 2/);
+  assert.match(await main().innerText(), /יובא מקובץ/);
+  await page.getByRole('button', { name: 'סיכום', exact: true }).click();
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'ייצוא PowerPoint' }).click()]);
+  assert.match(dl.suggestedFilename(), /\.pptx$/);
+  const { pptxToMarkdown } = await import('../../importers.mjs');
+  const back = await pptxToMarkdown(await readFile(await dl.path()));
+  assert.equal(back.slides, 3, 'cover plus two slides');
+  assert.match(back.markdown, /התפלגות נורמלית/);
+  assert.match(back.markdown, /הערות המרצה: להדגיש/);
+  await page.getByRole('button', { name: 'הדפסה / PDF' }).click();
+  await page.waitForURL(/#print\//);
+  await page.locator('.print-slide').first().waitFor();
+  assert.equal(await page.locator('.print-slide').count(), 2);
+  await axe('print view');
+});
+
+test('Lumi creates a presentation and a podcast from a summary (mocked provider)', async () => {
+  await page.evaluate(() => history.back());
+  await page.waitForURL(/#lesson\//);
+  await page.getByRole('button', { name: 'סיכום', exact: true }).click();
+  await page.getByRole('button', { name: /לומי: יצירת מצגת/ }).click();
+  await page.waitForFunction(() => document.querySelector('main').innerText.includes('מצגת שלומי יצר'));
+  assert.match(await main().innerText(), /פתיחה \(בדיקה\)/);
+  assert.match(await main().innerText(), /כרטיס 1 מתוך 2/);
+  await page.getByRole('button', { name: 'סיכום', exact: true }).click();
+  await page.getByRole('button', { name: /לומי: יצירת פודקאסט/ }).click();
+  await page.waitForFunction(() => document.querySelector('main').innerText.includes('פודקאסט שלומי כתב'));
+  assert.equal(await page.locator('#continuous').isChecked(), true);
+  assert.equal(await page.getByRole('button', { name: /פקודות קוליות/ }).count(), 1);
+  await axe('podcast lesson');
+});
+
+test('Moodle: wrong password refused, then courses and deadlines imported once', async () => {
+  await go('more');
+  await page.getByRole('button', { name: 'חיבור', exact: true }).click();
+  await page.getByLabel('כתובת האתר').fill('https://moodle.example.ac.il');
+  await page.getByLabel('שם משתמש').fill('student');
+  await page.getByLabel('סיסמה').fill('wrong');
+  await page.getByRole('button', { name: 'התחברות' }).click();
+  await page.locator('#form-error', { hasText: 'שגויים' }).waitFor();
+  await page.getByLabel('סיסמה').fill('right');
+  await page.getByRole('button', { name: 'התחברות' }).click();
+  await page.locator('#editor-title', { hasText: 'ייבוא מ-Moodle לבדיקה' }).waitFor();
+  await axe('moodle import dialog');
+  await page.getByRole('button', { name: 'ייבוא הנבחרים' }).click();
+  await page.waitForTimeout(200);
+  assert.match(await page.locator('#status').innerText(), /יובאו 1 קורסים ו-1 מטלות/);
+  assert.match(await main().innerText(), /Moodle לבדיקה/);
+  await page.getByRole('button', { name: 'סנכרון' }).click();
+  await page.locator('#editor-title', { hasText: 'ייבוא מ-' }).waitFor();
+  await page.getByRole('button', { name: 'ייבוא הנבחרים' }).click();
+  await page.waitForTimeout(200);
+  assert.match(await page.locator('#status').innerText(), /יובאו 0 קורסים ו-0 מטלות/);
+  await go('courses');
+  assert.match(await main().innerText(), /מבוא לכלכלה/);
+  await go('plan');
+  await page.getByRole('button', { name: 'השבוע', exact: true }).click();
+  const week = await main().innerText() + (await page.getByRole('button', { name: 'השבוע הבא' }).click(), await main().innerText());
+  assert.match(week, /עבודה 1/);
+});
+
 test('backup export, delete everything, import restores it', async () => {
   await go('more');
   const [dl] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'ייצוא גיבוי מלא' }).click()]);
@@ -197,6 +269,7 @@ test('backup export, delete everything, import restores it', async () => {
   assert.equal(backup.version, 3);
   assert.equal(backup.courses[0].name, 'סטטיסטיקה');
   assert.equal(JSON.stringify(backup).includes('test-code'), false, 'AI code is never in backups');
+  assert.equal(JSON.stringify(backup).includes('mocktoken'), false, 'Moodle token is never in backups');
   const [ics] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'ייצוא', exact: true }).click()]);
   assert.match(await readFile(await ics.path(), 'utf8'), /BEGIN:VCALENDAR/);
 

@@ -6,6 +6,7 @@ export const VERSION = 3;
 export const COLORS = ['blue', 'purple', 'teal', 'amber', 'pink', 'green'];
 export const ICONS = ['chart', 'flask', 'brain', 'people', 'book', 'code', 'globe', 'calc'];
 export const TASK_KINDS = ['assignment', 'study', 'exam', 'break'];
+export const NOTE_KINDS = ['summary', 'slides', 'podcast', 'import'];
 const LISTS = { courses: 100, notes: 1000, materials: 200, tasks: 2000, questions: 2000, sessions: 10000, reviews: 10000, glossary: 2000, reads: 40000 };
 
 export const uid = () => crypto.randomUUID();
@@ -68,16 +69,19 @@ export function validate(input) {
   const belongs = x => courses.has(x.courseId);
 
   for (const c of d.courses) {
-    c.instructor ??= ''; c.color ??= 'blue'; c.icon ??= 'book'; c.archived ??= false; c.examDate ??= '';
+    c.instructor ??= ''; c.color ??= 'blue'; c.icon ??= 'book'; c.archived ??= false; c.examDate ??= ''; c.ext ??= '';
+    if (!str(c.ext, 300)) fail();
     if (!(str(c.name, 150) && c.name.trim() && str(c.description, 1000) && str(c.instructor, 150) && COLORS.includes(c.color) && ICONS.includes(c.icon) && typeof c.archived === 'boolean' && (c.examDate === '' || validDate(c.examDate)))) fail();
   }
   for (const n of d.notes) {
-    n.position ??= 0;
+    n.position ??= 0; n.kind ??= 'summary';
+    if (!NOTE_KINDS.includes(n.kind)) fail();
     const okVersions = !n.versions || (Array.isArray(n.versions) && n.versions.length <= 10 && n.versions.every(v => str(v.title, 200) && str(v.text, 200000) && str(v.updatedAt, 40) && Number.isFinite(Date.parse(v.updatedAt)) && (v.source === undefined || ['manual', 'review', 'ai', 'restore'].includes(v.source))));
     if (!(belongs(n) && str(n.title, 200) && n.title.trim() && str(n.text, 200000) && str(n.updatedAt, 40) && Number.isFinite(Date.parse(n.updatedAt)) && okVersions && Number.isInteger(n.position) && num(n.position, 0, 400))) fail();
   }
   for (const t of d.tasks) {
-    t.kind ??= 'assignment'; t.time ??= ''; t.doneAt ??= '';
+    t.kind ??= 'assignment'; t.time ??= ''; t.doneAt ??= ''; t.ext ??= '';
+    if (!str(t.ext, 300)) fail();
     const courseOk = t.kind === 'break' ? (t.courseId === '' || belongs(t)) : belongs(t);
     if (!(courseOk && str(t.title, 200) && t.title.trim() && (!t.date || validDate(t.date)) && typeof t.done === 'boolean' && num(t.minutes, 5, 480) && (!t.planned || validDate(t.planned)) && TASK_KINDS.includes(t.kind) && validTime(t.time) && (t.doneAt === '' || validDate(t.doneAt)))) fail();
   }
@@ -99,10 +103,10 @@ export function validate(input) {
 
   // Copy only known fields. Unknown properties never reach application state.
   const keys = {
-    courses: ['id', 'name', 'description', 'instructor', 'color', 'icon', 'archived', 'examDate'],
-    notes: ['id', 'courseId', 'title', 'text', 'updatedAt', 'versions', 'position'],
+    courses: ['id', 'name', 'description', 'instructor', 'color', 'icon', 'archived', 'examDate', 'ext'],
+    notes: ['id', 'courseId', 'title', 'text', 'updatedAt', 'versions', 'position', 'kind'],
     materials: ['id', 'courseId', 'title', 'kind', 'url', 'data', 'filename'],
-    tasks: ['id', 'courseId', 'title', 'date', 'planned', 'minutes', 'done', 'kind', 'time', 'doneAt'],
+    tasks: ['id', 'courseId', 'title', 'date', 'planned', 'minutes', 'done', 'kind', 'time', 'doneAt', 'ext'],
     questions: ['id', 'courseId', 'prompt', 'answer'],
     sessions: ['id', 'courseId', 'minutes', 'date'],
     reviews: ['id', 'questionId', 'correct', 'date'],
@@ -370,4 +374,42 @@ export function attachmentBytes(data) {
   const match = /^data:(application\/pdf|image\/(?:png|jpeg|webp)|text\/plain);base64,((?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?)$/.exec(data);
   if (!match) throw Error('תוכן הקובץ אינו תקין.');
   return { type: match[1], bytes: Uint8Array.from(atob(match[2]), c => c.charCodeAt(0)) };
+}
+
+/**
+ * Merge a Moodle snapshot into state. Courses are matched by external id; only selected items are imported.
+ * snapshot: {site, courses:[{id, fullname}], items:[{id, courseId, name, due (YYYY-MM-DD)}]}; pick: {courses:Set, items:Set}
+ */
+export function mergeMoodle(d, snapshot, pick, now = new Date()) {
+  const next = structuredClone(d);
+  const site = new URL(snapshot.site).host;
+  const extC = id => `moodle:${site}:course:${id}`, extT = id => `moodle:${site}:item:${id}`;
+  let addedCourses = 0, addedTasks = 0, updatedTasks = 0;
+  const local = new Map();
+  for (const mc of snapshot.courses.filter(c => pick.courses.has(String(c.id)))) {
+    let c = next.courses.find(x => x.ext === extC(mc.id));
+    if (!c) {
+      c = { id: uid(), name: String(mc.fullname).slice(0, 150) || 'קורס', description: 'יובא מ-Moodle', instructor: '', color: COLORS[next.courses.length % COLORS.length], icon: ICONS[next.courses.length % ICONS.length], archived: false, examDate: '', ext: extC(mc.id) };
+      next.courses.push(c);
+      addedCourses++;
+    }
+    local.set(String(mc.id), c.id);
+  }
+  for (const it of snapshot.items.filter(i => pick.items.has(String(i.id)))) {
+    const courseId = local.get(String(it.courseId)) || next.courses.find(x => x.ext === extC(it.courseId))?.id;
+    if (!courseId) continue;
+    const existing = next.tasks.find(t => t.ext === extT(it.id));
+    if (existing) {
+      if (existing.date !== (it.due || '') || existing.title !== it.name.slice(0, 200)) { existing.date = it.due || ''; existing.title = it.name.slice(0, 200); updatedTasks++; }
+    } else {
+      next.tasks.push({ id: uid(), courseId, title: String(it.name).slice(0, 200), date: validDate(it.due) ? it.due : '', planned: '', minutes: 60, done: false, kind: 'assignment', time: '', doneAt: '', ext: extT(it.id) });
+      addedTasks++;
+    }
+  }
+  return { state: validate(next), addedCourses, addedTasks, updatedTasks };
+}
+
+/** Convert generated slides [{title, bullets[], notes}] into lesson markdown. */
+export function slidesToMarkdown(slides) {
+  return slides.map(s => `# ${s.title}\n${(s.bullets || []).map(b => '- ' + b).join('\n')}${s.notes ? '\n\n' + s.notes : ''}`).join('\n\n');
 }

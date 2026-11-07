@@ -1,13 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { emptyState, validate, migrate, validDate, validURL, weekDates, monthGrid, stats, reviewQueue, reviewDue, removeCourse, removeNote, weeklyReport, attachmentBytes, lumiReply, noteCards, noteProgress, courseProgress, overallCoverage, markRead, streak, periodStats, recommend, dayItems, toICS, formatMinutes } from '../model.mjs';
+import { mergeMoodle, slidesToMarkdown, emptyState, validate, migrate, validDate, validURL, weekDates, monthGrid, stats, reviewQueue, reviewDue, removeCourse, removeNote, weeklyReport, attachmentBytes, lumiReply, noteCards, noteProgress, courseProgress, overallCoverage, markRead, streak, periodStats, recommend, dayItems, toICS, formatMinutes } from '../model.mjs';
 
 function fixture() {
   const d = emptyState();
-  d.courses.push({ id: 'c1', name: 'סטטיסטיקה', description: '', instructor: 'ד״ר כהן', color: 'blue', icon: 'chart', archived: false, examDate: '' });
-  d.notes.push({ id: 'n1', courseId: 'c1', title: 'סיכום', text: '# התפלגות נורמלית\nמוגדרת על ידי ממוצע וסטיית תקן\n\n# משפט הגבול המרכזי\nממוצעים של מדגמים גדולים מתקרבים להתפלגות נורמלית', updatedAt: '2026-11-04T10:00:00Z', position: 0 });
+  d.courses.push({ id: 'c1', name: 'סטטיסטיקה', description: '', instructor: 'ד״ר כהן', color: 'blue', icon: 'chart', archived: false, examDate: '', ext: '' });
+  d.notes.push({ id: 'n1', courseId: 'c1', title: 'סיכום', text: '# התפלגות נורמלית\nמוגדרת על ידי ממוצע וסטיית תקן\n\n# משפט הגבול המרכזי\nממוצעים של מדגמים גדולים מתקרבים להתפלגות נורמלית', updatedAt: '2026-11-04T10:00:00Z', position: 0, kind: 'summary' });
   d.questions.push({ id: 'q1', courseId: 'c1', prompt: 'שאלה', answer: 'תשובה' });
-  d.tasks.push({ id: 't1', courseId: 'c1', title: 'מטלה', date: '2026-11-05', planned: '2026-11-04', minutes: 20, done: false, kind: 'assignment', time: '', doneAt: '' });
+  d.tasks.push({ id: 't1', courseId: 'c1', title: 'מטלה', date: '2026-11-05', planned: '2026-11-04', minutes: 20, done: false, kind: 'assignment', time: '', doneAt: '', ext: '' });
   d.glossary.push({ id: 'g1', courseId: 'c1', term: 'ממוצע', original: 'Mean', definition: 'סכום חלקי מספר ערכים' });
   return d;
 }
@@ -209,4 +209,24 @@ test('attachment export reconstructs exact UTF-8 bytes and rejects malformed bas
   const d = fixture();
   d.materials.push({ id: 'bad', courseId: 'c1', kind: 'file', title: 'קובץ פגום', data: 'data:text/plain;base64,====' });
   assert.throws(() => validate(d));
+});
+
+test('Moodle merge imports only selected items and is idempotent', () => {
+  const snap = { site: 'https://moodle.example.ac.il', courses: [{ id: 7, fullname: 'מבוא לסטטיסטיקה' }, { id: 8, fullname: 'לא נבחר' }], items: [{ id: 'a1', courseId: 7, name: 'מטלה 1', due: '2026-11-20' }, { id: 'a2', courseId: 8, name: 'x', due: '' }] };
+  const pick = { courses: new Set(['7']), items: new Set(['a1', 'a2']) };
+  const r1 = mergeMoodle(fixture(), snap, pick);
+  assert.equal(r1.addedCourses, 1);
+  assert.equal(r1.addedTasks, 1, 'items of unselected courses are skipped');
+  const t = r1.state.tasks.find(x => x.ext.endsWith(':item:a1'));
+  assert.equal(t.date, '2026-11-20');
+  snap.items[0].due = '2026-11-22';
+  const r2 = mergeMoodle(r1.state, snap, pick);
+  assert.equal(r2.addedCourses + r2.addedTasks, 0);
+  assert.equal(r2.updatedTasks, 1);
+  assert.equal(r2.state.tasks.length, r1.state.tasks.length);
+});
+
+test('generated slides become lesson cards', () => {
+  const md = slidesToMarkdown([{ title: 'פתיחה', bullets: ['א', 'ב'], notes: '' }, { title: 'סיום', bullets: ['ג'] }]);
+  assert.equal(md, '# פתיחה\n- א\n- ב\n\n# סיום\n- ג');
 });

@@ -1,3 +1,16 @@
+# Validation record - 2026-11-08 (0.4.0)
+
+| Suite | Result |
+| --- | --- |
+| `npm test` (unit, Lumi API, Moodle API, importers, service worker) | 46 passed |
+| `npm run e2e` (Chrome 390px, axe WCAG 2.2 AA) | 14 passed |
+
+New coverage: PowerPoint import from a python-pptx fixture (titles, levels, entities, notes via relationships); export round-trip (exported .pptx re-imported: cover + 2 slides, notes kept); print view (axe clean); Lumi slides and podcast with a mocked provider; Moodle with a mocked site (wrong password refused, import of 1 course + 1 deadline, re-sync imports nothing new, token excluded from backups); SSRF rules (http, localhost, private/IPv6-mapped addresses, credentials in URL, odd ports, redirects, non-Moodle responses).
+
+Not verified: a real institution's Moodle (needs the user's credentials); opening the exported .pptx in PowerPoint/Keynote; voice commands (speech recognition cannot run in headless tests).
+
+---
+
 # Validation record - 2026-11-07 (0.3.0)
 
 ## Automated checks (run in the development container)

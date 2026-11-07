@@ -323,3 +323,18 @@ html:not(.reduce-motion) .toast { transition: opacity .2s ease, transform .2s ea
 /* The toast never blocks taps on content underneath; only its undo button is interactive. */
 #dock > .toast { pointer-events: none; }
 .toast button { pointer-events: auto; }
+
+/* Print deck: one card per page, light, large readable text */
+.print-deck { display: grid; gap: 1rem; }
+.print-slide { background: #fff; color: #0b1330; border-radius: var(--radius); padding: 1.4rem; border: 1px solid var(--glass-border); }
+.print-slide h2 { color: #0b1330; font-size: 1.5rem; }
+.print-meta { font-size: .8rem; color: #444; margin: 0 0 .4rem; }
+@media print {
+  @page { size: A4 landscape; margin: 14mm; }
+  html, body { background: #fff !important; color: #000; }
+  body * { visibility: visible; }
+  .hide-print, #dock, .skip, .notice { display: none !important; }
+  main { padding: 0; max-width: none; }
+  .print-slide { break-after: page; border: 0; box-shadow: none; padding: 0; font-size: 18pt; }
+  .print-slide:last-child { break-after: auto; }
+}

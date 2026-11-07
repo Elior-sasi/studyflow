@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createHandler, validateBody, parseQuestions, buildRequest, providerOf } from '../api/lumi.js';
+import { createHandler, validateBody, parseQuestions, parseSlides, buildRequest, providerOf } from '../api/lumi.js';
 
 const URL_ = 'https://studyflow.example/api/lumi';
 const post = (body, headers = {}) => new Request(URL_, { method: 'POST', headers: { 'content-type': 'application/json', origin: 'https://studyflow.example', ...headers }, body: typeof body === 'string' ? body : JSON.stringify(body) });
@@ -128,4 +128,16 @@ test('answers with Arabic letters mixed into Hebrew are regenerated once', async
   const r = await createHandler({ env, fetchImpl: f }).POST(post(chat(), ipHeader()));
   assert.deepEqual(await r.json(), { text: 'תשובה תקינה' });
   assert.equal(n, 2);
+});
+
+test('slides and podcast modes: grounded prompts and defensive parsing', async () => {
+  assert.match(buildRequest({ mode: 'slides', title: 't', text: 'x' }).system, /"slides"/);
+  assert.match(buildRequest({ mode: 'podcast', title: 't', text: 'x' }).system, /פודקאסט/);
+  assert.deepEqual(parseSlides('{"slides":[{"title":"# א","bullets":["- ב",""," ג "],"notes":"ד"},{"title":""}]}'), [{ title: 'א', bullets: ['ב', 'ג'], notes: 'ד' }]);
+  assert.deepEqual(parseSlides('oops'), []);
+  const h = createHandler({ env, fetchImpl: fakeFetch('{"slides":[{"title":"פתיחה","bullets":["נקודה"]}]}') });
+  const r = await h.POST(post({ code: env.LUMI_ACCESS_CODE, mode: 'slides', title: 'ת', text: 'טקסט' }, ipHeader()));
+  assert.deepEqual(await r.json(), { slides: [{ title: 'פתיחה', bullets: ['נקודה'], notes: '' }] });
+  const p = createHandler({ env, fetchImpl: fakeFetch('# פתיחה\nשלום') });
+  assert.deepEqual(await (await p.POST(post({ code: env.LUMI_ACCESS_CODE, mode: 'podcast', title: 'ת', text: 'טקסט' }, ipHeader()))).json(), { text: '# פתיחה\nשלום' });
 });

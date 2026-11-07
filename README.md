@@ -15,7 +15,11 @@ The UI follows the six-screen design reference (home, Lumi chat, courses, lesson
 - **Practice**: user-authored questions with spaced repetition (1, 3, 7, 14, 30 days); can be run per course from the lesson.
 - **Summary review**: propose edits (manually, or from Lumi AI), see an accessible word diff (`<ins>/<del>` plus hidden "הוספה/מחיקה" text), edit the proposal, then accept or cancel. Nothing is overwritten without approval; ten versions are kept with their origin (manual/review/AI/restore).
 - **Lumi**: local mode answers from stored data and says it is not AI. With the server configured, Lumi uses a real LLM through `api/lumi.js`: grounded answers citing the user's own lesson cards (links to the exact card), summary improvement proposals, and question suggestions that the user selects before saving. Gendered or neutral address follows the setting.
-- **Calendar export**: `.ics` with deadlines (with a reminder a day before), study days and exam dates. Google Drive / Calendar / Moodle are shown as *not connected* with disabled controls.
+- **Moodle** (any institution with the mobile web service): connect in "עוד", pick courses and deadlines to import, re-sync later.
+- **PowerPoint**: import a lecturer's `.pptx` as a lesson; export any lesson to `.pptx`; print / save as PDF.
+- **Lumi creations**: a presentation or a podcast script generated from a summary, saved as new lessons.
+- **Voice commands** in the lesson player where the browser supports Hebrew speech recognition.
+- **Calendar export**: `.ics` with deadlines (with a reminder a day before), study days and exam dates. Google Drive and Calendar are shown as *in setup* with disabled controls.
 - **Settings**: dark/light theme, text 18-40 px plus A-/A+, high contrast, reduced motion, name, institution, form of address, speech rate and voice test, daily goal, session length.
 - **Data**: validated JSON backup/import (v1 legacy, v2 and v3 accepted), raw-data download, persistent-storage request, undo (last 15 changes), delete-all with double confirmation, cross-tab conflict detection, read-only lock on corrupt storage, offline app shell.
 
