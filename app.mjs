@@ -4,6 +4,10 @@ import { esc, speechText, diffWords, diffHTML, diffStats, retrieve } from './con
 import { icon } from './icons.mjs';
 import * as V from './views.mjs';
 import { pptxToMarkdown } from './importers.mjs';
+import * as C from './cloud.mjs';
+
+// Handle a Google sign-in redirect before anything reads the URL hash.
+const oauthReturn = C.consumeOAuthReturn();
 
 const $ = id => document.getElementById(id);
 const KEY = 'studyflow-v2'; // storage key kept for continuity; the stored object carries its own schema version
@@ -51,6 +55,7 @@ function commit(change, { undo = true, recovery = false } = {}) {
   } catch { throw Error('השמירה נכשלה. כדאי לבדוק מקום פנוי והרשאות אחסון. השינוי לא נשמר.'); }
   if (undo) { undoStack.push(state); undoStack = undoStack.slice(-15); }
   state = next; raw = text;
+  if (C.session()) { C.setSyncMeta({ ...C.syncMeta(), dirty: true }); scheduleSync(); }
   if (recovery) { locked = false; $('storage-error').hidden = true; }
   applySettings();
   return true;
@@ -135,7 +140,7 @@ function render(focus = false) {
   if (r.name !== 'lesson' && ui.focus) { ui.focus = false; document.body.classList.remove('focus-mode'); }
   document.title = `${TITLES[r.name]} · StudyFlow`;
   renderNav();
-  const env = { bytes: new Blob([raw || '']).size, canUndo: undoStack.length > 0, moodle: moodleConn() };
+  const env = { bytes: new Blob([raw || '']).size, canUndo: undoStack.length > 0, moodle: moodleConn(), account: C.session(), sync: { ...C.syncMeta(), ...cloud }, push: { support: C.pushSupport(), on: Boolean(C.pushState()) } };
   const view = {
     home: () => V.home(state, ui), lumi: () => V.lumiView(state, ui), courses: () => V.courses(state, ui),
     course: () => V.courseDetail(state, ui, r.id), lesson: () => V.lesson(state, ui, r.id), plan: () => V.plan(state, ui),
@@ -201,10 +206,11 @@ function editCourse(id) {
     return c ? 'הקורס עודכן.' : 'הקורס נוצר.';
   });
 }
-function editNote(courseId, id) {
+function editNote(courseId, id, prefill = null) {
   requireCourse();
-  const n = state.notes.find(x => x.id === id);
-  openEditor(n ? 'עריכת סיכום' : 'סיכום חדש', V.courseSelect(state, n?.courseId || courseId) +
+  const n = state.notes.find(x => x.id === id) || (prefill ? { courseId, title: prefill.title, text: prefill.text, kind: prefill.kind, isPrefill: true } : undefined);
+  const existing = n && !n.isPrefill;
+  openEditor(existing ? 'עריכת סיכום' : 'סיכום חדש', V.courseSelect(state, n?.courseId || courseId) +
     `<label for="f-title">כותרת</label><input id="f-title" name="title" required maxlength="200" value="${esc(n?.title)}">
     <label for="f-text">תוכן הסיכום</label><textarea id="f-text" name="text" rows="12" required maxlength="200000" aria-describedby="text-hint">${esc(n?.text)}</textarea>
     <p class="hint" id="text-hint">שורה שמתחילה ב-"# " פותחת כרטיס חדש במצגת. "- " יוצר נקודה, ו-**טקסט** מודגש.</p>
@@ -212,18 +218,18 @@ function editNote(courseId, id) {
     <p class="hint">ממצגת PowerPoint נלקחים הכותרות, הנקודות והערות המרצה - כל שקופית הופכת לכרטיס. תמונות וגרפים לא מיובאים.</p>
     <input type="hidden" name="kind" id="f-kind-note" value="${esc(n?.kind || 'summary')}">`,
   f => {
-    const v = { id: n?.id || M.uid(), courseId: f.get('courseId'), title: f.get('title').trim(), text: f.get('text').trim(), updatedAt: new Date().toISOString(), position: n && n.text === f.get('text').trim() ? n.position : 0, kind: ['summary', 'slides', 'podcast', 'import'].includes(f.get('kind')) ? f.get('kind') : 'summary' };
+    const v = { id: (existing && n.id) || M.uid(), courseId: f.get('courseId'), title: f.get('title').trim(), text: f.get('text').trim(), updatedAt: new Date().toISOString(), position: existing && n.text === f.get('text').trim() ? n.position : 0, kind: ['summary', 'slides', 'podcast', 'import'].includes(f.get('kind')) ? f.get('kind') : 'summary' };
     if (!v.title || !v.text) throw Error('יש להזין כותרת ותוכן.');
     commit(d => {
-      if (n) {
+      if (existing) {
         const i = findIndex(d.notes, n.id, 'הסיכום הוסר בחלון אחר.'), old = d.notes[i];
         v.versions = [...(old.versions || []), { title: old.title, text: old.text, updatedAt: old.updatedAt, source: 'manual' }].slice(-10);
         if (old.courseId !== v.courseId) d.reads = d.reads.filter(r => r.noteId !== n.id);
         d.notes[i] = v;
       } else d.notes.push(v);
     });
-    if (!n) location.hash = 'lesson/' + v.id;
-    return n ? 'הסיכום עודכן. הגרסה הקודמת נשמרה.' : 'הסיכום נשמר.';
+    if (!existing) location.hash = 'lesson/' + v.id;
+    return existing ? 'הסיכום עודכן. הגרסה הקודמת נשמרה.' : 'הסיכום נשמר.';
   });
 }
 function editTerm(courseId, id) {
@@ -729,6 +735,30 @@ const actions = {
   'moodle-connect': () => moodleConnect(),
   'moodle-sync': () => moodleSync(),
   'moodle-forget': () => { if (!confirm('לנתק את Moodle מהדפדפן הזה? הקורסים והמשימות שיובאו נשארים.')) return; try { localStorage.removeItem(MOODLE_KEY); } catch {} render(); status('Moodle נותק.'); },
+  login: () => C.startGoogleAuth('login', [], '#more'),
+  logout: () => {
+    if (!confirm('להתנתק מהחשבון במכשיר הזה? הנתונים נשארים במכשיר ובענן.')) return;
+    C.disablePush().catch(() => {}); C.signOut(); render(); status('התנתקת. הנתונים נשארו במכשיר ובענן.');
+  },
+  'sync-now': () => syncNow({ interactive: true }),
+  'drive-import': async id => {
+    const token = C.accessToken(C.SCOPES.drive);
+    if (!token) { C.startGoogleAuth('drive', [C.SCOPES.drive], location.hash, { action: 'drive-import', id }); return; }
+    await drivePicker(token, id);
+  },
+  'calendar-sync': async () => {
+    const token = C.accessToken(C.SCOPES.calendar);
+    if (!token) { C.startGoogleAuth('calendar', [C.SCOPES.calendar], '#more', { action: 'calendar-sync' }); return; }
+    status('מסנכרן ל-Google Calendar…');
+    const r = await C.calendarSync(token, state);
+    status(`היומן עודכן: ${r.created} נוספו, ${r.updated} עודכנו, ${r.removed} הוסרו (${r.total} אירועים של StudyFlow).`);
+  },
+  'push-enable': async () => {
+    if (!C.session()) throw Error('צריך להתחבר עם Google ולהפעיל סנכרון, כי התזכורת נשלחת מהשרת לפי הנתונים בענן.');
+    await C.enablePush(); render(); status('תזכורת הבוקר הופעלה במכשיר הזה.');
+  },
+  'push-disable': async () => { await C.disablePush(); render(); status('התזכורות כבויות במכשיר הזה.'); },
+  'push-test': async () => { await syncNow({}); const n = await C.testPush(); status(n ? 'נשלחה התראת בדיקה. היא אמורה להופיע בעוד כמה שניות.' : 'ההתראה לא נשלחה.'); },
   'export-ics': () => { download(M.toICS(state), 'studyflow-' + M.today() + '.ics', 'text/calendar;charset=utf-8'); status('קובץ היומן מוכן. פותחים אותו כדי להוסיף את המועדים ליומן.'); },
   export: exportBackup,
   'export-raw': () => { const get = k => { try { return localStorage.getItem(k); } catch { return null; } }; download(JSON.stringify({ current: get(KEY), previousSchema: get(KEY + '-pre-v3'), legacy: get('studyflow'), recovery: get(KEY + '-recovery') }, null, 2), 'studyflow-original-data.json'); status('עותק נתוני המקור הוכן להורדה.'); },
@@ -736,7 +766,8 @@ const actions = {
   undo: () => undo(),
   'delete-all': () => {
     if (!confirm('למחוק את כל הנתונים מהמכשיר: קורסים, סיכומים, קבצים, משימות והתקדמות? מומלץ לייצא גיבוי קודם.')) return;
-    if (!confirm('אישור אחרון: המחיקה סופית ולא ניתן לבטל אותה.')) return;
+    if (!confirm('אישור אחרון: המחיקה סופית ולא ניתן לבטל אותה.' + (C.session() ? ' גם העותק בענן יימחק, והחשבון ינותק מהמכשיר.' : ''))) return;
+    if (C.session()) { C.deleteCloud().catch(() => {}); C.disablePush().catch(() => {}); C.signOut(); }
     for (const k of [KEY, KEY + '-pre-v3', KEY + '-recovery', 'studyflow', AI_KEY, MOODLE_KEY]) try { localStorage.removeItem(k); } catch {}
     state = M.emptyState(); raw = null; locked = false; undoStack = []; session = null; ui.chat = []; ui.quiz = null; ui.ai.verified = false;
     $('storage-error').hidden = true;
@@ -896,6 +927,110 @@ async function moodleSync() {
   }, { submitLabel: 'ייבוא הנבחרים' });
 }
 
+// ---------- Cloud sync ----------
+const cloud = { busy: false, error: '' };
+let syncTimer = 0;
+function scheduleSync() { clearTimeout(syncTimer); syncTimer = setTimeout(() => syncNow({}), 2500); }
+function replaceFromCloud(data, version) {
+  const next = M.validate(data);
+  const text = JSON.stringify(next);
+  try { if (raw) localStorage.setItem(KEY + '-before-cloud', raw); localStorage.setItem(KEY, text); } catch { throw Error('לא ניתן לשמור את הנתונים מהענן במכשיר.'); }
+  state = next; raw = text; undoStack = []; ui.lessonNote = '';
+  C.setSyncMeta({ version, dirty: false, at: new Date().toISOString() });
+  applySettings();
+}
+function isEmpty(d) { return !d.courses.length && !d.notes.length && !d.tasks.length && !d.questions.length; }
+async function syncNow({ interactive = false } = {}) {
+  if (!C.session() || cloud.busy || locked) return;
+  cloud.busy = true; cloud.error = '';
+  try {
+    const meta = C.syncMeta();
+    const remote = await C.pullCloud();
+    if (remote.status !== 200) throw Error('הסנכרון נכשל.');
+    const rv = remote.body.version || 0;
+    if (rv > meta.version) {
+      if (!meta.dirty || isEmpty(state)) {
+        replaceFromCloud(remote.body.data, rv);
+        render();
+        if (interactive || meta.version) status('הנתונים עודכנו מהענן.');
+        return;
+      }
+      if (!remote.body.data) { /* fall through to push */ }
+      else { cloud.busy = false; return conflict(remote.body); }
+    }
+    if (meta.dirty || rv === 0) {
+      const r = await C.pushCloud(rv, state);
+      if (r.status === 409) { cloud.busy = false; return conflict(r.body); }
+      if (r.status !== 200) throw Error(r.status === 413 ? 'הנתונים גדולים מדי לסנכרון (מעל 4.5 MB). כדאי להסיר קבצים גדולים.' : 'שמירה בענן נכשלה.');
+      C.setSyncMeta({ version: r.body.version, dirty: false, at: new Date().toISOString() });
+      if (interactive) status('הנתונים נשמרו בענן.');
+    } else {
+      C.setSyncMeta({ ...meta, at: new Date().toISOString() });
+      if (interactive) status('הכול מסונכרן.');
+    }
+  } catch (e) {
+    cloud.error = e.offline ? 'אין חיבור - יסונכרן כשהרשת תחזור.' : e.message;
+    if (interactive) status(cloud.error);
+  } finally {
+    cloud.busy = false;
+    if (route().name === 'more' && !$('editor').open) render();
+  }
+}
+function conflict(remote) {
+  const when = remote.updatedAt ? new Date(remote.updatedAt).toLocaleString('he-IL') : '';
+  const count = d => `${d.courses?.length || 0} קורסים, ${d.notes?.length || 0} סיכומים, ${d.tasks?.length || 0} משימות`;
+  openEditor('יש שינויים בשני מכשירים', `<p>הנתונים בענן השתנו ממכשיר אחר${when ? ' (' + esc(when) + ')' : ''}, וגם כאן יש שינויים שלא נשמרו. צריך לבחור איזו גרסה תישאר. הגרסה שלא תיבחר נשמרת כגיבוי בדפדפן הזה.</p>
+    <fieldset><legend>איזו גרסה לשמור?</legend>
+    <label class="check"><input type="radio" name="keep" value="cloud" checked> הגרסה מהענן: ${esc(count(remote.data || {}))}</label>
+    <label class="check"><input type="radio" name="keep" value="local"> הגרסה מהמכשיר הזה: ${esc(count(state))}</label></fieldset>`,
+  async f => {
+    if (f.get('keep') === 'cloud') { replaceFromCloud(remote.data, remote.version); return 'נטענה הגרסה מהענן. הגרסה הקודמת של המכשיר נשמרה כגיבוי.'; }
+    try { localStorage.setItem(KEY + '-cloud-backup', JSON.stringify(remote.data)); } catch {}
+    const r = await C.pushCloud(remote.version, state);
+    if (r.status !== 200) throw Error('השמירה בענן נכשלה. כדאי לנסות שוב.');
+    C.setSyncMeta({ version: r.body.version, dirty: false, at: new Date().toISOString() });
+    return 'הגרסה מהמכשיר הזה נשמרה בענן.';
+  }, { submitLabel: 'שמירת הבחירה' });
+}
+async function afterOAuth(o) {
+  if (!o) return;
+  if (o.error) { status(o.error === 'access_denied' ? 'ההתחברות בוטלה.' : 'ההתחברות עם Google נכשלה. כדאי לנסות שוב.'); return; }
+  if (o.purpose === 'login' || !C.session()) {
+    if (!o.idToken) return;
+    try { const j = await C.finishLogin(o.idToken, o.nonce); status(`מחובר כ-${j.email}. מסנכרן…`); }
+    catch (e) { status(e.message); return; }
+    const meta = C.syncMeta();
+    const remote = await C.pullCloud().catch(() => null);
+    if (remote?.status === 200 && remote.body.version && !isEmpty(state) && !meta.version && remote.body.data) { render(); return conflict(remote.body); }
+    C.setSyncMeta({ ...C.syncMeta(), dirty: !isEmpty(state) });
+    await syncNow({ interactive: true });
+  }
+  if (o.after?.action && actions[o.after.action]) act(() => actions[o.after.action](o.after.id));
+}
+
+// ---------- Google Drive picker ----------
+async function drivePicker(token, courseId, query = '') {
+  status('טוען קבצים מ-Google Drive…');
+  let files;
+  try { files = await C.driveList(token, query); }
+  catch (e) { if (e.reauth) return C.startGoogleAuth('drive', [C.SCOPES.drive], location.hash, { action: 'drive-import', id: courseId }); throw e; }
+  status('');
+  openEditor('ייבוא מ-Google Drive', `<p>בוחרים קובץ: מסמך Google, מצגת Google או PowerPoint, או קובץ טקסט. מצגות הופכות לכרטיסים, כולל הערות המרצה.</p>
+    <label for="drive-q">חיפוש לפי שם</label><div class="actions" style="margin:0"><input id="drive-q" value="${esc(query)}" style="flex:1"><button type="button" data-action="drive-search" data-id="${esc(courseId)}">חיפוש</button></div>
+    <fieldset><legend>קבצים אחרונים (${files.length})</legend>${files.map((f, i) => `<label class="check"><input type="radio" name="file" value="${i}" ${i === 0 ? 'checked' : ''}> ${esc(f.name)} <span class="badge">${esc(f.typeLabel)}</span></label>`).join('') || '<p class="muted">לא נמצאו קבצים מתאימים.</p>'}</fieldset>`,
+  async f => {
+    const file = files[Number(f.get('file'))];
+    if (!file) throw Error('לא נבחר קובץ.');
+    $('form-error').textContent = 'מוריד את הקובץ…';
+    const c = await C.driveContent(token, file);
+    const text = c.kind === 'pptx' ? (await pptxToMarkdown(c.buffer)).markdown : c.text;
+    if (!text.trim()) throw Error('הקובץ ריק או שלא נמצא בו טקסט.');
+    setTimeout(() => editNote(courseId, '', { title: file.name.replace(/\.[^.]+$/, '').slice(0, 200), text: text.slice(0, 200000), kind: 'import' }), 0);
+    return 'הקובץ נקרא. אפשר לבדוק את הטקסט לפני השמירה.';
+  }, { submitLabel: 'ייבוא הקובץ' });
+}
+actions['drive-search'] = id => { const q = $('drive-q')?.value.trim() || ''; const token = C.accessToken(C.SCOPES.drive); if (token) return drivePicker(token, id, q); };
+
 // ---------- Events ----------
 document.addEventListener('click', e => {
   const restore = e.target.closest('[data-restore-note]');
@@ -1011,6 +1146,11 @@ applySettings();
 $('toast').classList.add('idle');
 render(true);
 aiInit();
+afterOAuth(oauthReturn).catch(report);
+if (C.session() && !oauthReturn) syncNow({});
+setInterval(() => { if (document.visibilityState === 'visible') syncNow({}); }, 60_000);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') syncNow({}); });
+window.addEventListener('online', () => syncNow({}));
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('/sw.js').then(reg => {
     reg.addEventListener('updatefound', () => {

@@ -7,12 +7,16 @@ import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHandler } from '../api/lumi.js';
 import { createMoodleHandler } from '../api/moodle.js';
+import { createAuthHandler } from '../api/auth.js';
+import { createSyncHandler } from '../api/sync.js';
+import { createPushHandler } from '../api/push.js';
+import { memoryStore, GOOGLE_CLIENT_ID } from '../api/_lib/core.js';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const port = Number(process.argv.find(a => a.startsWith('--port='))?.slice(7) || 4173);
 const mock = process.argv.includes('--mock-ai');
 const TYPES = { '.html': 'text/html; charset=utf-8', '.mjs': 'text/javascript', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.webmanifest': 'application/manifest+json', '.json': 'application/json' };
-const ALLOWED = new Set(['/index.html', '/app.mjs', '/model.mjs', '/content.mjs', '/views.mjs', '/icons.mjs', '/style.css', '/sw.js', '/manifest.webmanifest', '/icon.svg', '/importers.mjs', '/vendor/pptxgen.bundle.js']);
+const ALLOWED = new Set(['/index.html', '/app.mjs', '/model.mjs', '/content.mjs', '/views.mjs', '/icons.mjs', '/style.css', '/sw.js', '/manifest.webmanifest', '/icon.svg', '/importers.mjs', '/cloud.mjs', '/vendor/pptxgen.bundle.js']);
 
 const fakeProvider = async (url, init) => {
   const body = JSON.parse(init.body);
@@ -40,18 +44,27 @@ const fakeMoodle = async (url, init) => {
   }[p.wsfunction] || {});
 };
 const moodle = createMoodleHandler(mock ? { fetchImpl: fakeMoodle, resolve: async () => [{ address: '93.184.216.34' }] } : { fetchImpl: fetch });
+// Mock account (with --mock-ai): Google id token "mock.id.token" signs in as test@example.com; data in memory.
+const accountEnv = mock ? { DATABASE_URL: 'mock-db', STUDYFLOW_ALLOWED_EMAILS: 'test@example.com' } : process.env;
+const fakeGoogle = async () => new Response(JSON.stringify({ iss: 'https://accounts.google.com', aud: GOOGLE_CLIENT_ID, exp: String(Math.floor(Date.now() / 1000) + 3600), email_verified: 'true', sub: 'test-sub', email: 'test@example.com', name: 'בודק', nonce: 'n1' }), { status: 200 });
+const store = mock ? memoryStore() : undefined;
+const extra = {
+  '/api/auth': createAuthHandler({ env: accountEnv, fetchImpl: mock ? fakeGoogle : fetch }),
+  '/api/sync': createSyncHandler({ env: accountEnv, store }),
+  '/api/push': createPushHandler({ env: accountEnv, store, sender: mock ? async () => 'sent' : undefined }),
+};
 const api = createHandler({ env: mock ? { ANTHROPIC_API_KEY: 'mock', LUMI_ACCESS_CODE: 'test-code' } : process.env, fetchImpl: mock ? fakeProvider : fetch });
 const vercel = JSON.parse(await readFile(join(root, 'vercel.json'), 'utf8'));
 const security = Object.fromEntries(vercel.headers[0].headers.map(h => [h.key, h.value.replace(' upgrade-insecure-requests', '')]));
 
 http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://localhost:${port}`);
-  if (url.pathname === '/api/lumi' || url.pathname === '/api/moodle') {
+  if (url.pathname === '/api/lumi' || url.pathname === '/api/moodle' || extra[url.pathname]) {
     const chunks = [];
     for await (const c of req) chunks.push(c);
-    const request = new Request(url, { method: req.method, headers: { ...req.headers, origin: req.headers.origin || url.origin }, body: req.method === 'POST' ? Buffer.concat(chunks) : undefined });
-    const h = url.pathname === '/api/moodle' ? moodle : api;
-    const r = await (req.method === 'POST' ? h.POST(request) : (h.GET ? h.GET(request) : new Response('', { status: 405 })));
+    const request = new Request(url, { method: req.method, headers: { ...req.headers, origin: req.headers.origin || url.origin }, body: ['POST', 'PUT'].includes(req.method) ? Buffer.concat(chunks) : undefined });
+    const h = extra[url.pathname] || (url.pathname === '/api/moodle' ? moodle : api);
+    const r = await (h[req.method] ? h[req.method](request) : new Response('', { status: 405 }));
     res.writeHead(r.status, Object.fromEntries(r.headers));
     res.end(Buffer.from(await r.arrayBuffer()));
     return;

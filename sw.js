@@ -1,5 +1,7 @@
-const CACHE='studyflow-shell-v9';
-const CORE=['/','/index.html','/app.mjs','/model.mjs','/content.mjs','/views.mjs','/icons.mjs','/importers.mjs','/style.css','/manifest.webmanifest','/icon.svg'];
+const CACHE='studyflow-shell-v10';
+const CORE=['/','/index.html','/app.mjs','/model.mjs','/content.mjs','/views.mjs','/icons.mjs','/importers.mjs','/cloud.mjs','/style.css','/manifest.webmanifest','/icon.svg'];
 self.addEventListener('install',event=>{event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(CORE)).then(()=>self.skipWaiting()))});
 self.addEventListener('activate',event=>{event.waitUntil(Promise.all([caches.keys().then(keys=>Promise.all(keys.filter(key=>key.startsWith('studyflow-')&&key!==CACHE).map(key=>caches.delete(key)))),self.clients.claim()]))});
 self.addEventListener('fetch',event=>{const request=event.request,url=new URL(request.url);if(request.method!=='GET'||url.origin!==self.location.origin||url.pathname.startsWith('/api/')||(!CORE.includes(url.pathname)&&request.mode!=='navigate'))return;event.respondWith((async()=>{const cache=await caches.open(CACHE);if(request.mode==='navigate')return await cache.match('/index.html')||fetch(request);return await cache.match(url.pathname)||fetch(request)})())});
+self.addEventListener('push',event=>{let d={title:'StudyFlow',body:''};try{d=event.data?event.data.json():d}catch{}event.waitUntil(self.registration.showNotification(d.title||'StudyFlow',{body:d.body||'',icon:'/icon.svg',badge:'/icon.svg',lang:'he',dir:'rtl',tag:'studyflow-daily',data:{url:d.url||'/#plan'}}))});
+self.addEventListener('notificationclick',event=>{event.notification.close();const url=new URL(event.notification.data?.url||'/#plan',self.location.origin).href;event.waitUntil(clients.matchAll({type:'window',includeUncontrolled:true}).then(list=>{for(const c of list){if(new URL(c.url).origin===self.location.origin){c.navigate(url);return c.focus()}}return clients.openWindow(url)}))});

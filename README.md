@@ -15,6 +15,9 @@ The UI follows the six-screen design reference (home, Lumi chat, courses, lesson
 - **Practice**: user-authored questions with spaced repetition (1, 3, 7, 14, 30 days); can be run per course from the lesson.
 - **Summary review**: propose edits (manually, or from Lumi AI), see an accessible word diff (`<ins>/<del>` plus hidden "הוספה/מחיקה" text), edit the proposal, then accept or cancel. Nothing is overwritten without approval; ten versions are kept with their origin (manual/review/AI/restore).
 - **Lumi**: local mode answers from stored data and says it is not AI. With the server configured, Lumi uses a real LLM through `api/lumi.js`: grounded answers citing the user's own lesson cards (links to the exact card), summary improvement proposals, and question suggestions that the user selects before saving. Gendered or neutral address follows the setting.
+- **Account and sync**: sign in with Google (allow-listed accounts only) to keep data in the cloud and sync phone and computer; conflicts ask which copy to keep.
+- **Google Drive** import (Docs, Slides, PowerPoint, text) and **Google Calendar** one-way sync of deadlines, exams and study days.
+- **Morning reminder** push notification (installed PWA on iPhone) when something is due.
 - **Moodle** (any institution with the mobile web service): connect in "עוד", pick courses and deadlines to import, re-sync later.
 - **PowerPoint**: import a lecturer's `.pptx` as a lesson; export any lesson to `.pptx`; print / save as PDF.
 - **Lumi creations**: a presentation or a podcast script generated from a summary, saved as new lessons.
@@ -38,6 +41,12 @@ Set in Vercel → Project → Settings → Environment Variables (Production):
 Note: on Gemini's free tier Google may use submitted content to improve its products.
 
 Until a provider key and the access code exist, `GET /api/lumi` returns `{"configured":false}` and the app stays in local mode. The endpoint validates and size-limits input, compares the code in constant time, rate-limits per IP (best effort per instance), rejects cross-origin requests, never stores content and never returns the key. The access code is kept only in the browser's `localStorage` and is excluded from backups.
+
+## Account and sync setup (already configured in production)
+
+- Google Cloud project `gen-lang-client-0175835722` (AI Studio project "StudyFlow"): Google Auth Platform in Testing mode with allow-listed test users, a Web OAuth client (origin and redirect `https://studyflow-elior-sasi.vercel.app`), Drive and Calendar APIs enabled. The client id is public and lives in `cloud.mjs` and `api/_lib/core.js`.
+- Vercel: Neon database `studyflow-sync` (provides `DATABASE_URL`), `STUDYFLOW_ALLOWED_EMAILS` (comma-separated), cron in `vercel.json`.
+- Tables `sf_state` and `sf_push` are created automatically on first use.
 
 ## Data and privacy
 

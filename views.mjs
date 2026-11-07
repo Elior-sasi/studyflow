@@ -142,7 +142,7 @@ export function courseDetail(st, ui, id) {
   <section class="card c-${esc(c.color)}" aria-labelledby="cov-h"><h2 id="cov-h">התקדמות בקורס</h2><p>${coverageText(p)}</p>${p.total ? progressBar(p.ratio, 'כיסוי חומר בקורס') : ''}<p class="muted">${formatMinutes(minutes)} למידה מתועדת · ${tasks.filter(t => !t.done).length} משימות פתוחות · ${qs.length} שאלות חזרה</p>
   <div class="actions">${btn(icon('timer') + ' התחלת זמן למידה', 'start-session', id, 'primary')}${btn(icon('edit') + ' עריכה', 'edit-course', id)}${btn(icon('archive') + (c.archived ? ' החזרה מארכיון' : ' העברה לארכיון'), 'archive-course', id)}${btn(icon('trash') + ' מחיקה', 'delete-course', id, 'danger')}</div></section>
 
-  <div class="page-head" style="margin-bottom:0"><h2 class="section-title">שיעורים וסיכומים</h2>${btn(icon('plus') + ' סיכום', 'edit-note', id)}</div>
+  <div class="page-head" style="margin-bottom:0"><h2 class="section-title">שיעורים וסיכומים</h2><div class="actions" style="margin:0">${btn(icon('plus') + ' סיכום', 'edit-note', id)}${btn(icon('download') + ' מ-Drive', 'drive-import', id, '', 'aria-label="ייבוא מ-Google Drive"')}</div></div>
   ${notes.length ? `<ul class="rows">${notes.map(n => { const np = noteProgress(st, n); return `<li><a class="row-link c-${esc(c.color)}" href="#lesson/${esc(n.id)}">${tile(c, 'doc')}<span class="grow"><span class="title">${esc(n.title)}</span><span class="sub">${np.total ? `${np.read} מתוך ${np.total} כרטיסים נקראו` : 'סיכום ריק'}</span>${np.total ? progressBar(np.ratio, 'התקדמות בשיעור ' + n.title) : ''}</span>${icon('chevron')}</a></li>`; }).join('')}</ul>` : `<div class="empty">אין עדיין סיכומים. אפשר להדביק טקסט או לייבא קובץ TXT / Markdown. כותרות "# " יוצרות כרטיסים נפרדים לקריאה ולהקראה.</div>`}
 
   <div class="page-head" style="margin-bottom:0"><h2 class="section-title">משימות ומועדים</h2>${btn(icon('plus') + ' משימה', 'new-task-course', id)}</div>
@@ -299,7 +299,25 @@ export function progress(st, ui) {
 export function more(st, ui, env) {
   const s = st.settings, ai = ui.ai;
   const radio = (name, value, label, cur) => `<label class="check"><input type="radio" name="${name}" value="${value}" ${cur === value ? 'checked' : ''} data-setting="${name}"> ${label}</label>`;
+  const acc = env.account, sync = env.sync, push = env.push;
   return `${head('עוד')}
+  <section class="card" aria-labelledby="acc-h"><h2 id="acc-h">חשבון וסנכרון</h2>
+    ${acc ? `<p><span class="badge ok">מחובר</span> ${esc(acc.email)}</p>
+      <p class="small muted" role="status">${sync.busy ? 'מסנכרן…' : sync.error ? esc(sync.error) : sync.dirty ? 'יש שינויים שממתינים לסנכרון.' : sync.at ? 'סונכרן לאחרונה: ' + new Date(sync.at).toLocaleString('he-IL') : 'עוד לא סונכרן.'}</p>
+      <p class="hint">הנתונים נשמרים גם בענן (מסד נתונים פרטי בשרת של האפליקציה) ומתעדכנים אוטומטית בכל מכשיר שמחובר לאותו חשבון. קבצים מצורפים נכללים.</p>
+      <div class="actions">${btn(icon('repeat') + ' סנכרון עכשיו', 'sync-now', '', 'primary')}${btn('התנתקות', 'logout', '', 'danger')}</div>`
+    : `<p>התחברות עם חשבון Google שומרת את הנתונים בענן ומסנכרנת אותם בין הטלפון למחשב. בלי התחברות, הנתונים נשארים רק בדפדפן הזה.</p>
+      <div class="actions">${btn(icon('people') + ' התחברות עם Google', 'login', '', 'primary')}</div>
+      <p class="hint">רק חשבונות מורשים יכולים להתחבר. Google יציג אזהרה ש"האפליקציה לא אומתה", כי זו אפליקציה פרטית בשלב בדיקה.</p>`}
+  </section>
+
+  <section class="card" aria-labelledby="notif-h"><h2 id="notif-h">תזכורות</h2>
+    ${push.support === 'install' ? '<p>באייפון, התראות זמינות רק כשהאפליקציה מותקנת במסך הבית: בספארי לוחצים שיתוף > "הוסף למסך הבית", ופותחים משם.</p>'
+      : push.support === 'unsupported' ? '<p>הדפדפן הזה לא תומך בהתראות.</p>'
+      : push.support === 'denied' ? '<p>ההתראות חסומות עבור האתר. אפשר לאפשר אותן בהגדרות הדפדפן או המכשיר.</p>'
+      : push.on ? `<p><span class="badge ok">פועל</span> כל בוקר בסביבות 7:00 מגיעה התראה עם המבחנים, ההגשות והמשימות של היום ומחר - רק כשיש משהו.</p><div class="actions">${btn('שליחת התראת בדיקה', 'push-test')}${btn('כיבוי', 'push-disable', '', 'danger')}</div>`
+      : `<p>תזכורת בוקר יומית עם מה שחשוב היום: מבחנים, הגשות ומשימות מתוכננות. נשלחת מהשרת לפי הנתונים המסונכרנים${acc ? '' : ', ולכן דורשת התחברות'}.</p><div class="actions">${btn(icon('timer') + ' הפעלת תזכורת בוקר', 'push-enable', '', 'primary', acc ? '' : 'disabled')}</div>`}
+  </section>
   <ul class="rows">
     <li><a class="row-link" href="#lumi">${lumi(44)}<span class="grow"><span class="title">לומי</span><span class="sub">${ai.verified ? 'מחובר ל-AI' : 'מצב מקומי'}</span></span>${icon('chevron')}</a></li>
     <li><a class="row-link" href="#practice">${tile({ color: 'teal' }, 'repeat')}<span class="grow"><span class="title">תרגול וחזרה</span><span class="sub">${reviewQueue(st).length} שאלות ממתינות היום</span></span>${icon('chevron')}</a></li>
@@ -339,16 +357,17 @@ export function more(st, ui, env) {
   <section class="card" aria-labelledby="int-h"><h2 id="int-h">חיבורים</h2>
     <div class="integration"><div><b>יומן (קובץ ICS)</b><p class="muted small" style="margin:0">ייצוא מועדי הגשה, מבחנים וימי למידה, עם תזכורת יום לפני. נפתח ביומן של אייפון, Google ו-Outlook.</p></div>${btn(icon('download') + ' ייצוא', 'export-ics')}</div>
     <div class="integration"><div><b>Moodle</b> ${env.moodle ? `<span class="badge ok">מחובר</span>` : '<span class="badge">לא מחובר</span>'}<p class="muted small" style="margin:0">${env.moodle ? `${esc(env.moodle.siteName || env.moodle.site)}${env.moodle.user ? ' · ' + esc(env.moodle.user) : ''}. מייבא קורסים ומועדי הגשה לפי בחירה.` : 'כל מוסד שמאפשר את אפליקציית Moodle לנייד. הסיסמה לא נשמרת - רק מפתח גישה, בדפדפן הזה בלבד.'}</p></div><div class="actions" style="margin:0">${env.moodle ? btn(icon('repeat') + ' סנכרון', 'moodle-sync', '', 'primary') + btn('ניתוק', 'moodle-forget', '', 'danger') : btn('חיבור', 'moodle-connect', '', 'primary')}</div></div>
-    ${[['Google Drive', 'ייבוא סיכומים וקבצים מתיקייה שבוחרים.'], ['Google Calendar', 'סנכרון דו-כיווני של מועדים.']].map(([n, d]) => `<div class="integration"><div><b>${n}</b> <span class="badge">לא מחובר</span><p class="muted small" style="margin:0">${d} בהקמה - דורש התחברות עם Google.</p></div><button type="button" disabled aria-disabled="true">טרם זמין</button></div>`).join('')}
+    <div class="integration"><div><b>Google Calendar</b><p class="muted small" style="margin:0">מעתיק מועדי הגשה, מבחנים וימי למידה ליומן הראשי שלך, עם תזכורת ערב לפני. סנכרון חד-כיווני: שינויים ביומן לא חוזרים לאפליקציה. בכל סנכרון האירועים של StudyFlow מתעדכנים, ואירועים של משימות שבוצעו נמחקים.</p></div>${btn(icon('calendar') + ' סנכרון ליומן', 'calendar-sync')}</div>
+    <div class="integration"><div><b>Google Drive</b><p class="muted small" style="margin:0">ייבוא מסמכי Google, מצגות Google ו-PowerPoint כשיעורים. נמצא בכל קורס, ליד "סיכום". הגישה לקריאה בלבד.</p></div></div>
   </section>
 
   <section class="card" aria-labelledby="data-h"><h2 id="data-h">נתונים, גיבוי ופרטיות</h2>
-    <p>כל הנתונים נשמרים בדפדפן הזה בלבד (${Math.round(env.bytes / 1024)} KB). אין חשבון או סנכרון בין מכשירים, וניקוי נתוני האתר מוחק אותם. מומלץ לייצא גיבוי באופן קבוע.</p>
+    <p>הנתונים נשמרים בדפדפן הזה (${Math.round(env.bytes / 1024)} KB)${env.account ? ' וגם בענן של החשבון' : '. בלי התחברות אין עותק בענן, וניקוי נתוני האתר מוחק אותם'}. מומלץ לייצא גיבוי מדי פעם.</p>
     <div class="actions">${btn(icon('download') + ' ייצוא גיבוי מלא', 'export', '', 'primary')}${btn('בקשת אחסון מתמשך', 'persist')}${btn('הורדת נתוני המקור', 'export-raw')}</div>
     <label for="backup-file">ייבוא גיבוי (מחליף את הנתונים אחרי בדיקה ואישור)</label><input id="backup-file" type="file" accept=".json,application/json">
     <div class="actions">${btn('ביטול השינוי האחרון', 'undo', '', '', env.canUndo ? '' : 'disabled')}${btn(icon('trash') + ' מחיקת כל הנתונים', 'delete-all', '', 'danger')}</div>
   </section>
-  <p class="muted small">StudyFlow 0.4 · בטא מקומית. ${ai.verified ? 'לומי AI מחובר דרך השרת.' : 'אין AI מחובר.'} אין סנכרון ענן. קבצי PDF ותמונות נשמרים להורדה בלבד.</p>`;
+  <p class="muted small">StudyFlow 0.5 · בטא. ${ai.verified ? 'לומי AI מחובר דרך השרת.' : 'אין AI מחובר.'} ${env.account ? 'סנכרון ענן פעיל.' : 'בלי התחברות אין סנכרון ענן.'} קבצי PDF ותמונות נשמרים להורדה בלבד.</p>`;
 }
 
 // ---------- Editor bodies ----------

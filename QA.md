@@ -1,3 +1,16 @@
+# Validation record - 2026-11-08 (0.5.0)
+
+| Suite | Result |
+| --- | --- |
+| `npm test` | 53 passed |
+| `npm run e2e` | 15 passed |
+
+New: session signing/forgery/expiry, Google ID-token checks (audience, issuer, expiry, verified email, nonce), allow list, per-user isolation, compare-and-set and 409 conflict payloads, invalid data rejected, VAPID key validity (also accepted by the web-push library), Israel-date digest content, push subscribe/test/unsubscribe, cron auth and dead-endpoint cleanup. E2E: simulated Google return on two browser contexts (laptop and phone): first device uploads, second device downloads, phone edits reach the laptop, a two-sided change opens the conflict dialog (axe clean) and the chosen copy wins; the OAuth fragment is removed from the URL; sessions never appear in backups.
+
+Not verified automatically: real Google consent, Drive listing/export and Calendar writes (need the user's account), real push delivery to a phone, the cron in production.
+
+---
+
 # Validation record - 2026-11-08 (0.4.0)
 
 | Suite | Result |

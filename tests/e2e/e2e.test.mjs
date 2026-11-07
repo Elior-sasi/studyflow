@@ -238,17 +238,17 @@ test('Moodle: wrong password refused, then courses and deadlines imported once',
   await page.getByLabel('כתובת האתר').fill('https://moodle.example.ac.il');
   await page.getByLabel('שם משתמש').fill('student');
   await page.getByLabel('סיסמה').fill('wrong');
-  await page.getByRole('button', { name: 'התחברות' }).click();
+  await page.getByRole('button', { name: 'התחברות', exact: true }).click();
   await page.locator('#form-error', { hasText: 'שגויים' }).waitFor();
   await page.getByLabel('סיסמה').fill('right');
-  await page.getByRole('button', { name: 'התחברות' }).click();
+  await page.getByRole('button', { name: 'התחברות', exact: true }).click();
   await page.locator('#editor-title', { hasText: 'ייבוא מ-Moodle לבדיקה' }).waitFor();
   await axe('moodle import dialog');
   await page.getByRole('button', { name: 'ייבוא הנבחרים' }).click();
   await page.waitForTimeout(200);
   assert.match(await page.locator('#status').innerText(), /יובאו 1 קורסים ו-1 מטלות/);
   assert.match(await main().innerText(), /Moodle לבדיקה/);
-  await page.getByRole('button', { name: 'סנכרון' }).click();
+  await page.getByRole('button', { name: 'סנכרון', exact: true }).click();
   await page.locator('#editor-title', { hasText: 'ייבוא מ-' }).waitFor();
   await page.getByRole('button', { name: 'ייבוא הנבחרים' }).click();
   await page.waitForTimeout(200);
@@ -261,6 +261,52 @@ test('Moodle: wrong password refused, then courses and deadlines imported once',
   assert.match(week, /עבודה 1/);
 });
 
+async function signIn(p) {
+  await p.evaluate(() => sessionStorage.setItem('sf-oauth', JSON.stringify({ state: 's1', nonce: 'n1', purpose: 'login', returnHash: '#more' })));
+  await p.goto(BASE + '/?r=' + Math.random() + '#access_token=at&id_token=mock.id.token&state=s1&expires_in=3600&scope=openid');
+  await p.locator('.badge.ok', { hasText: 'מחובר' }).first().waitFor();
+  await p.waitForFunction(() => /סונכרן לאחרונה/.test(document.querySelector('main').innerText), null, { timeout: 10000 });
+}
+
+test('Google account sync: a second device receives the data, edits flow back, conflicts ask the user', async () => {
+  await signIn(page);
+  assert.equal(await page.evaluate(() => location.hash), '#more', 'OAuth fragment removed from the address bar');
+  await axe('more with account');
+  const phone = await browser.newContext({ viewport: { width: 390, height: 844 }, locale: 'he-IL' });
+  const p2 = await phone.newPage();
+  p2.on('pageerror', e => errors.push('phone: ' + e.message));
+  await p2.goto(BASE + '/#home');
+  await signIn(p2);
+  await p2.evaluate(() => { location.hash = 'courses'; });
+  await p2.locator('main', { hasText: 'סטטיסטיקה' }).waitFor();
+  // phone adds a course; laptop pulls it
+  await p2.evaluate(() => { location.hash = 'home'; });
+  await p2.getByRole('button', { name: 'קורס', exact: true }).click();
+  await p2.getByLabel('שם הקורס').fill('קורס מהטלפון');
+  await p2.locator('#editor-submit').click();
+  await p2.waitForFunction(() => JSON.parse(localStorage.getItem('studyflow-sync')).dirty === false, null, { timeout: 10000 });
+  await go('more');
+  await page.getByRole('button', { name: 'סנכרון עכשיו' }).click();
+  await page.waitForTimeout(500);
+  await go('courses');
+  assert.match(await main().innerText(), /קורס מהטלפון/);
+  // both change; the laptop gets a conflict dialog
+  await p2.evaluate(() => { location.hash = 'home'; });
+  await p2.getByRole('button', { name: 'קורס', exact: true }).click();
+  await p2.getByLabel('שם הקורס').fill('עוד מהטלפון');
+  await p2.locator('#editor-submit').click();
+  await p2.waitForFunction(() => JSON.parse(localStorage.getItem('studyflow-sync')).dirty === false, null, { timeout: 10000 });
+  await page.evaluate(() => { const m = JSON.parse(localStorage.getItem('studyflow-sync')); localStorage.setItem('studyflow-sync', JSON.stringify({ ...m, dirty: true })); });
+  await go('more');
+  await page.getByRole('button', { name: 'סנכרון עכשיו' }).click();
+  await page.locator('#editor-title', { hasText: 'יש שינויים בשני מכשירים' }).waitFor();
+  await axe('sync conflict dialog');
+  await page.locator('#editor-submit').click();
+  await go('courses');
+  assert.match(await main().innerText(), /עוד מהטלפון/);
+  await phone.close();
+});
+
 test('backup export, delete everything, import restores it', async () => {
   await go('more');
   const [dl] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'ייצוא גיבוי מלא' }).click()]);
@@ -270,6 +316,7 @@ test('backup export, delete everything, import restores it', async () => {
   assert.equal(backup.courses[0].name, 'סטטיסטיקה');
   assert.equal(JSON.stringify(backup).includes('test-code'), false, 'AI code is never in backups');
   assert.equal(JSON.stringify(backup).includes('mocktoken'), false, 'Moodle token is never in backups');
+  assert.equal(/"session"|studyflow-sync/.test(JSON.stringify(backup)), false, 'account session is never in backups');
   const [ics] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'ייצוא', exact: true }).click()]);
   assert.match(await readFile(await ics.path(), 'utf8'), /BEGIN:VCALENDAR/);
 

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.0 - 2026-11-08
+
+- **Sign in with Google and cloud sync** between devices: OAuth redirect flow without third-party scripts; the server verifies the Google ID token (audience, issuer, expiry, verified email, nonce) and an allow list (`STUDYFLOW_ALLOWED_EMAILS`), then issues a signed 120-day session. Data is stored per user in Neon Postgres (`DATABASE_URL` from the Vercel integration) with version compare-and-set; conflicts ask which copy to keep and keep the other as a local backup.
+- **Google Drive import** (read-only): Google Docs (as Markdown), Google Slides and PowerPoint (slides and speaker notes), text and Markdown files become lessons after review.
+- **Google Calendar sync** (one-way): deadlines, exams and study days upserted into the primary calendar with an evening-before reminder; events of completed tasks are removed. Only events created by StudyFlow are touched.
+- **Morning reminders** via Web Push: daily Vercel Cron at 05:00 UTC (07:00 Israel winter time) sends a digest only when there is something due; test notification button; dead subscriptions removed. VAPID keys and session keys are derived from the database secret, so no extra secret was created by hand.
+- CSP allows `connect-src https://www.googleapis.com` for Drive/Calendar calls.
+
 ## 0.4.0 - 2026-11-08
 
 - **Moodle for any institution** (`api/moodle.js`): sign in with site URL + username/password (exchanged once for a mobile-service token; the password is never stored) or paste a token for SSO sites. Choose which courses and deadlines to import; re-sync updates changed dates without duplicates. SSRF guarded (https, public addresses only, no redirects, limits).
