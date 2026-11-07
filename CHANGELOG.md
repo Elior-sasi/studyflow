@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.2 - 2026-11-08
+
+- Gemini default model `gemini-3.8-flash` (2.5-flash is retired for new users), automatic fallback to `gemini-flash-latest` and `gemini-flash-lite-latest` on busy (503/429) or retired (404) models, with short retries.
+- Provider errors now show the upstream status and message (keys redacted).
+- Verified in production with a real Gemini key: access code accepted, live answer received.
+
 ## 0.3.1 - 2026-11-07
 
 - Lumi server supports Google Gemini (`GEMINI_API_KEY`, default `gemini-2.5-flash`) alongside Claude; provider chosen automatically or by `LUMI_PROVIDER`. The key travels only in a request header.
