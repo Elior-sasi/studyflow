@@ -25,11 +25,15 @@ Set in Vercel → Project → Settings → Environment Variables (Production):
 
 | Variable | Purpose |
 | --- | --- |
-| `ANTHROPIC_API_KEY` | Provider key. Server only. |
-| `LUMI_ACCESS_CODE` | A private code the user types once in "עוד". Prevents strangers from spending the key. |
-| `LUMI_MODEL` (optional) | Model id; default `claude-sonnet-4-5`. |
+| `GEMINI_API_KEY` | Google Gemini key (from Google AI Studio). Server only. Preferred when present. |
+| `ANTHROPIC_API_KEY` | Alternative provider: Claude. Server only. |
+| `LUMI_ACCESS_CODE` | A private code the user types once in "עוד". Prevents strangers from spending the key. Required. |
+| `LUMI_PROVIDER` (optional) | `gemini` or `anthropic` when both keys exist. |
+| `LUMI_MODEL` (optional) | Model id; defaults `gemini-2.5-flash` / `claude-sonnet-4-5`. |
 
-Until both required variables exist, `GET /api/lumi` returns `{"configured":false}` and the app stays in local mode. The endpoint validates and size-limits input, compares the code in constant time, rate-limits per IP (best effort per instance), rejects cross-origin requests, never stores content and never returns the key. The access code is kept only in the browser's `localStorage` and is excluded from backups.
+Note: on Gemini's free tier Google may use submitted content to improve its products.
+
+Until a provider key and the access code exist, `GET /api/lumi` returns `{"configured":false}` and the app stays in local mode. The endpoint validates and size-limits input, compares the code in constant time, rate-limits per IP (best effort per instance), rejects cross-origin requests, never stores content and never returns the key. The access code is kept only in the browser's `localStorage` and is excluded from backups.
 
 ## Data and privacy
 

@@ -83,7 +83,7 @@ function courseRow(st, c) {
 // ---------- Lumi ----------
 export function lumiView(st, ui) {
   const ai = ui.ai;
-  const status = ai.verified ? 'מחובר למודל AI בשרת' : ai.configured ? 'AI זמין - נדרש קוד גישה' : 'מצב מקומי, ללא AI';
+  const status = ai.verified ? `מחובר ל-AI${ai.provider ? ' (' + ai.provider + ')' : ''}` : ai.configured ? 'AI זמין - נדרש קוד גישה' : 'מצב מקומי, ללא AI';
   const chips = ai.verified
     ? [['הסבר פשוט יותר', 'תסביר את זה שוב בפשטות, עם דוגמה'], ['דוגמה', 'תן דוגמה מתוך החומר שלי'], ['תרגול', 'שאל אותי שאלה אחת לבדיקת הבנה על הנושא האחרון']]
     : [['המשימות שלי', 'מה המשימות הקרובות שלי?'], ['ההתקדמות שלי', 'מה ההתקדמות שלי?'], ['איך לתרגל?', 'איך לתרגל?']];
@@ -326,8 +326,8 @@ export function more(st, ui, env) {
 
   <section class="card" aria-labelledby="ai-h"><h2 id="ai-h">לומי AI</h2>
     ${ai.configured === null ? '<p>בודק אם השרת זמין…</p>'
-      : !ai.configured ? `<p><span class="badge">לא מוגדר</span></p><p>השרת של האפליקציה עדיין לא הוגדר עם ספק AI, ולכן לומי פועל במצב מקומי. ${ai.reason ? esc(ai.reason) : ''}</p><p class="hint">להפעלה: ב-Vercel מגדירים את משתני הסביבה ANTHROPIC_API_KEY ו-LUMI_ACCESS_CODE (קוד גישה פרטי שמונע שימוש של אחרים בחשבון). המפתח נשמר רק בשרת.</p>`
-      : ai.verified ? `<p><span class="badge ok">מחובר ומאומת</span></p><p>שאלות נשלחות לשרת יחד עם קטעים רלוונטיים מהסיכומים שלך בלבד. שום דבר לא נשמר בשרת.</p>${btn('ניתוק מהמכשיר הזה', 'ai-forget', '', 'danger')}`
+      : !ai.configured ? `<p><span class="badge">לא מוגדר</span></p><p>השרת של האפליקציה עדיין לא הוגדר עם ספק AI, ולכן לומי פועל במצב מקומי. ${ai.reason ? esc(ai.reason) : ''}</p><p class="hint">להפעלה: ב-Vercel מגדירים את משתני הסביבה GEMINI_API_KEY (או ANTHROPIC_API_KEY) ו-LUMI_ACCESS_CODE - קוד גישה פרטי שמונע שימוש של אחרים במפתח. המפתח נשמר רק בשרת.</p>`
+      : ai.verified ? `<p><span class="badge ok">מחובר ומאומת</span>${ai.provider ? ' · ' + esc(ai.provider) : ''}</p><p>שאלות נשלחות לשרת יחד עם קטעים רלוונטיים מהסיכומים שלך בלבד. שום דבר לא נשמר בשרת.</p>${btn('ניתוק מהמכשיר הזה', 'ai-forget', '', 'danger')}`
       : `<p><span class="badge">דרוש קוד גישה</span></p><form id="ai-form"><label for="ai-code">קוד הגישה של לומי</label><input id="ai-code" name="code" type="password" autocomplete="current-password" maxlength="200" required><p class="hint">הקוד נשמר רק בדפדפן הזה ואינו נכלל בגיבויים.</p><button class="primary">חיבור ובדיקה</button></form>`}
   </section>
 
@@ -342,7 +342,7 @@ export function more(st, ui, env) {
     <label for="backup-file">ייבוא גיבוי (מחליף את הנתונים אחרי בדיקה ואישור)</label><input id="backup-file" type="file" accept=".json,application/json">
     <div class="actions">${btn('ביטול השינוי האחרון', 'undo', '', '', env.canUndo ? '' : 'disabled')}${btn(icon('trash') + ' מחיקת כל הנתונים', 'delete-all', '', 'danger')}</div>
   </section>
-  <p class="muted small">StudyFlow 0.3 · בטא מקומית. ${ai.verified ? 'לומי AI מחובר דרך השרת.' : 'אין AI מחובר.'} אין סנכרון ענן. קבצי PDF ותמונות נשמרים להורדה בלבד.</p>`;
+  <p class="muted small">StudyFlow 0.3.1 · בטא מקומית. ${ai.verified ? 'לומי AI מחובר דרך השרת.' : 'אין AI מחובר.'} אין סנכרון ענן. קבצי PDF ותמונות נשמרים להורדה בלבד.</p>`;
 }
 
 // ---------- Editor bodies ----------

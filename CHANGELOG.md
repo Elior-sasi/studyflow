@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.1 - 2026-11-07
+
+- Lumi server supports Google Gemini (`GEMINI_API_KEY`, default `gemini-2.5-flash`) alongside Claude; provider chosen automatically or by `LUMI_PROVIDER`. The key travels only in a request header.
+- Settings and Lumi show which provider is connected.
+
 ## 0.3.0 - 2026-11-07
 
 ### Added

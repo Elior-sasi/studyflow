@@ -1,6 +1,8 @@
 // Lumi server endpoint (Vercel Function, Web Request/Response API).
-// Secrets stay on the server: ANTHROPIC_API_KEY and LUMI_ACCESS_CODE are Vercel environment variables.
-// Without both, the endpoint reports "not configured" and the app stays in honest local mode.
+// Secrets stay on the server as Vercel environment variables:
+//   LUMI_ACCESS_CODE + GEMINI_API_KEY (Google Gemini)  or  LUMI_ACCESS_CODE + ANTHROPIC_API_KEY (Claude).
+//   LUMI_PROVIDER ('gemini' | 'anthropic') picks one when both keys exist; LUMI_MODEL overrides the model.
+// Without a provider key and an access code, the endpoint reports "not configured" and the app stays in local mode.
 import { createHash, timingSafeEqual } from 'node:crypto';
 
 const MAX_BODY = 90_000;
@@ -82,11 +84,48 @@ export function parseQuestions(text) {
   } catch { return []; }
 }
 
+export function providerOf(env) {
+  const want = String(env.LUMI_PROVIDER || '').toLowerCase();
+  if (want === 'gemini') return env.GEMINI_API_KEY ? 'gemini' : '';
+  if (want === 'anthropic') return env.ANTHROPIC_API_KEY ? 'anthropic' : '';
+  return env.GEMINI_API_KEY ? 'gemini' : env.ANTHROPIC_API_KEY ? 'anthropic' : '';
+}
+
+/** Provider-specific request building and response parsing. Both return {ok, status, text}. */
+async function callProvider(provider, env, req, json, fetchImpl, signal) {
+  if (provider === 'gemini') {
+    const model = env.LUMI_MODEL || 'gemini-2.5-flash';
+    const r = await fetchImpl(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+      method: 'POST',
+      signal,
+      headers: { 'content-type': 'application/json', 'x-goog-api-key': env.GEMINI_API_KEY },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: req.system }] },
+        contents: req.messages.map(m => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] })),
+        generationConfig: { maxOutputTokens: req.max_tokens * 2, temperature: 0.4, ...(json ? { responseMimeType: 'application/json' } : {}), ...(/flash/.test(model) ? { thinkingConfig: { thinkingBudget: 0 } } : {}) },
+      }),
+    });
+    if (!r.ok) return { ok: false, status: r.status };
+    const data = await r.json();
+    const text = (data.candidates?.[0]?.content?.parts || []).map(p => p.text || '').join('').trim();
+    return { ok: true, text };
+  }
+  const r = await fetchImpl('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    signal,
+    headers: { 'content-type': 'application/json', 'x-api-key': env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
+    body: JSON.stringify({ model: env.LUMI_MODEL || 'claude-sonnet-4-5', ...req }),
+  });
+  if (!r.ok) return { ok: false, status: r.status };
+  const data = await r.json();
+  return { ok: true, text: (data.content || []).filter(c => c.type === 'text').map(c => c.text).join('\n').trim() };
+}
+
 export function createHandler({ env, fetchImpl, now = () => Date.now() }) {
-  const configured = () => Boolean(env.ANTHROPIC_API_KEY && env.LUMI_ACCESS_CODE);
+  const configured = () => Boolean(providerOf(env) && env.LUMI_ACCESS_CODE);
   return {
     async GET() {
-      return json(200, { configured: configured() });
+      return json(200, { configured: configured(), provider: configured() ? providerOf(env) : null });
     },
     async POST(request) {
       if (!configured()) return json(503, { error: 'not_configured' });
@@ -107,15 +146,9 @@ export function createHandler({ env, fetchImpl, now = () => Date.now() }) {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), 45_000);
       try {
-        const r = await fetchImpl('https://api.anthropic.com/v1/messages', {
-          method: 'POST',
-          signal: controller.signal,
-          headers: { 'content-type': 'application/json', 'x-api-key': env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
-          body: JSON.stringify({ model: env.LUMI_MODEL || 'claude-sonnet-4-5', ...req }),
-        });
+        const r = await callProvider(providerOf(env), env, req, body.mode === 'questions', fetchImpl, controller.signal);
         if (!r.ok) return json(502, { error: r.status === 429 ? 'provider_busy' : 'provider_error' });
-        const data = await r.json();
-        const out = (data.content || []).filter(c => c.type === 'text').map(c => c.text).join('\n').trim();
+        const out = r.text;
         if (!out) return json(502, { error: 'empty_response' });
         if (body.mode === 'questions') {
           const questions = parseQuestions(out);

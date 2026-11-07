@@ -456,7 +456,9 @@ async function aiInit() {
     const r = await fetch('/api/lumi', { signal: ctrl.signal, cache: 'no-store' });
     clearTimeout(t);
     if (!r.ok || !/json/.test(r.headers.get('content-type') || '')) throw Error();
-    ui.ai.configured = Boolean((await r.json()).configured);
+    const info = await r.json();
+    ui.ai.configured = Boolean(info.configured);
+    ui.ai.provider = info.provider === 'gemini' ? 'Gemini' : info.provider === 'anthropic' ? 'Claude' : '';
     if (ui.ai.configured && aiCode()) {
       try { await callLumi({ mode: 'ping' }); ui.ai.verified = true; } catch { ui.ai.verified = false; }
     }
