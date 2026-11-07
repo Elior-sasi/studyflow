@@ -112,3 +112,12 @@ test('Gemini provider: chosen automatically, key in header only, response parsed
   const failing = createHandler({ env: genv, fetchImpl: async () => new Response('{}', { status: 429 }) });
   assert.deepEqual(await (await failing.POST(post(chat(), ipHeader()))).json(), { error: 'provider_busy', upstream: 429, detail: '' });
 });
+
+test('Gemini falls back to current model aliases when the primary is busy or retired', async () => {
+  const genv = { GEMINI_API_KEY: 'AIza-secret', LUMI_ACCESS_CODE: env.LUMI_ACCESS_CODE };
+  const seen = [];
+  const f = async url => { const m = /models\/([^:]+):/.exec(url)[1]; seen.push(m); return m === 'gemini-flash-latest' ? new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: 'עובד' }] } }] }), { status: 200 }) : new Response('{"error":{"status":"NOT_FOUND"}}', { status: 404 }); };
+  const r = await createHandler({ env: genv, fetchImpl: f }).POST(post(chat(), ipHeader()));
+  assert.deepEqual(await r.json(), { text: 'עובד' });
+  assert.deepEqual(seen, ['gemini-3.8-flash', 'gemini-flash-latest']);
+});

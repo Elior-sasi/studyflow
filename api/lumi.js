@@ -94,21 +94,25 @@ export function providerOf(env) {
 /** Provider-specific request building and response parsing. Both return {ok, status, text}. */
 async function callProvider(provider, env, req, json, fetchImpl, signal) {
   if (provider === 'gemini') {
-    const model = env.LUMI_MODEL || 'gemini-3.8-flash';
+    // Primary model, then aliases that Google keeps pointed at current models, for high-demand or retired-model errors.
+    const models = [...new Set([env.LUMI_MODEL || 'gemini-3.8-flash', 'gemini-flash-latest', 'gemini-flash-lite-latest'])];
     let r;
-    for (let attempt = 0; attempt < 3; attempt++) {
-      if (attempt) await new Promise(res => setTimeout(res, 1200 * attempt));
-      r = await fetchImpl(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
-      method: 'POST',
-      signal,
-      headers: { 'content-type': 'application/json', 'x-goog-api-key': env.GEMINI_API_KEY },
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: req.system }] },
-        contents: req.messages.map(m => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] })),
-        generationConfig: { maxOutputTokens: req.max_tokens * 2, temperature: 0.4, ...(json ? { responseMimeType: 'application/json' } : {}), ...(/^gemini-2\.5-flash/.test(model) ? { thinkingConfig: { thinkingBudget: 0 } } : {}) },
-      }),
-      });
-      if (r.status !== 503 && r.status !== 429) break;
+    for (const [i, model] of models.entries()) {
+      for (let attempt = 0; attempt < 2; attempt++) {
+        if (attempt) await new Promise(res => setTimeout(res, 1500));
+        r = await fetchImpl(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+          method: 'POST',
+          signal,
+          headers: { 'content-type': 'application/json', 'x-goog-api-key': env.GEMINI_API_KEY },
+          body: JSON.stringify({
+            systemInstruction: { parts: [{ text: req.system }] },
+            contents: req.messages.map(m => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] })),
+            generationConfig: { maxOutputTokens: req.max_tokens * 2, temperature: 0.4, ...(json ? { responseMimeType: 'application/json' } : {}) },
+          }),
+        });
+        if (r.status !== 503 && r.status !== 429) break;
+      }
+      if (![503, 429, 404].includes(r.status) || i === models.length - 1) break;
     }
     if (!r.ok) {
       const err = await r.json().catch(() => ({}));
