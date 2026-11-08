@@ -335,7 +335,7 @@ export function more(st, ui, env) {
   <section class="card" aria-labelledby="disp-h"><h2 id="disp-h">תצוגה ונגישות</h2>
     <fieldset><legend>ערכת צבעים</legend>${radio('theme', 'dark', 'כהה', s.theme)}${radio('theme', 'light', 'בהירה', s.theme)}</fieldset>
     <label for="font-size">גודל טקסט: <output id="font-value" for="font-size">${s.font} פיקסלים</output></label>
-    <input id="font-size" type="range" min="18" max="40" step="2" value="${s.font}" data-setting="font">
+    <input id="font-size" type="range" min="16" max="40" step="1" value="${s.font}" data-setting="font">
     <div class="actions">${btn('A-', 'font-step', '-2', '', 'aria-label="הקטנת טקסט"')}${btn('A+', 'font-step', '2', '', 'aria-label="הגדלת טקסט"')}</div>
     <label class="check"><input type="checkbox" data-setting="contrast" ${s.contrast ? 'checked' : ''}> ניגודיות גבוהה</label>
     <label class="check"><input type="checkbox" data-setting="motion" ${s.motion === 'reduce' ? 'checked' : ''}> הפחתת תנועה ואנימציות</label>

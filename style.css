@@ -1,6 +1,6 @@
 /* StudyFlow design system: deep navy glass, neon accents, large scalable type. All sizes in rem so the font setting scales everything. */
 :root {
-  --font: 20px;
+  --font: 17px;
   color-scheme: dark;
   --bg: #050816;
   --bg-2: #0b1233;
@@ -54,7 +54,7 @@ body {
 }
 body.high-contrast { background: var(--bg); }
 h1, h2, h3 { line-height: 1.25; margin: 0 0 .4rem; }
-h1 { font-size: 1.75rem; letter-spacing: -.01em; }
+h1 { font-size: 1.6rem; letter-spacing: -.01em; }
 h2 { font-size: 1.25rem; }
 h3 { font-size: 1.05rem; }
 p { margin: .3rem 0 .6rem; }

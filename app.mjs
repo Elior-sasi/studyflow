@@ -699,7 +699,7 @@ const actions = {
       return `${picks.length} שאלות נוספו למאגר.`;
     }, { submitLabel: 'הוספת השאלות שנבחרו' });
   },
-  'font-step': n => { const v = Math.max(18, Math.min(40, state.settings.font + Number(n))); commit(d => { d.settings.font = v; }, { undo: false }); render(); status(`גודל טקסט: ${v}`); },
+  'font-step': n => { const v = Math.max(16, Math.min(40, state.settings.font + Number(n))); commit(d => { d.settings.font = v; }, { undo: false }); render(); status(`גודל טקסט: ${v}`); },
   'test-voice': () => {
     const v = heVoice();
     const u = new SpeechSynthesisUtterance('שלום, זה הקול שיקריא לך את השיעורים.');
@@ -1180,6 +1180,8 @@ window.addEventListener('pagehide', stopSpeech);
 window.addEventListener('online', () => { if (ui.ai.configured === false) aiInit(); });
 if ('speechSynthesis' in window) speechSynthesis.addEventListener?.('voiceschanged', () => {});
 
+// 0.5.3: the old default text size (20px) was too large on phones; move it once to the new default (17px).
+try { if (!locked && state.settings.font === 20 && !localStorage.getItem('sf-font-v2')) { commit(d => { d.settings.font = 17; }, { undo: false }); } localStorage.setItem('sf-font-v2', '1'); } catch {}
 applySettings();
 $('toast').classList.add('idle');
 render(true);

@@ -30,7 +30,7 @@ function addDays(date, n) {
 }
 
 export function defaultSettings() {
-  return { font: 20, contrast: false, minutes: 20, dailyGoal: 30, address: 'n', name: '', institution: '', speechRate: 1, theme: 'dark', motion: 'system', continuous: false };
+  return { font: 17, contrast: false, minutes: 20, dailyGoal: 30, address: 'n', name: '', institution: '', speechRate: 1, theme: 'dark', motion: 'system', continuous: false };
 }
 export function emptyState() {
   return { version: VERSION, courses: [], notes: [], materials: [], tasks: [], questions: [], sessions: [], reviews: [], glossary: [], reads: [], settings: defaultSettings() };
@@ -99,7 +99,7 @@ export function validate(input) {
   if (!d.reads.every(r => notes.get(r.noteId)?.courseId === r.courseId && str(r.card, 16) && /^[0-9a-f]{8}$/.test(r.card) && validDate(r.date))) fail();
 
   const s = { ...defaultSettings(), ...(d.settings || {}) };
-  if (!(num(s.font, 18, 40) && typeof s.contrast === 'boolean' && num(s.minutes, 5, 120) && num(s.dailyGoal, 5, 480) && ['m', 'f', 'n'].includes(s.address) && str(s.name, 150) && str(s.institution, 150) && num(s.speechRate, 0.5, 2) && ['dark', 'light'].includes(s.theme) && ['system', 'reduce'].includes(s.motion) && typeof s.continuous === 'boolean')) fail();
+  if (!(num(s.font, 16, 40) && typeof s.contrast === 'boolean' && num(s.minutes, 5, 120) && num(s.dailyGoal, 5, 480) && ['m', 'f', 'n'].includes(s.address) && str(s.name, 150) && str(s.institution, 150) && num(s.speechRate, 0.5, 2) && ['dark', 'light'].includes(s.theme) && ['system', 'reduce'].includes(s.motion) && typeof s.continuous === 'boolean')) fail();
 
   // Copy only known fields. Unknown properties never reach application state.
   const keys = {
