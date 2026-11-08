@@ -65,8 +65,8 @@ a { color: var(--accent); }
 .skip { position: absolute; inset-inline-start: .5rem; top: -4rem; background: var(--focus); color: #000; padding: .6rem 1rem; border-radius: .6rem; z-index: 50; font-weight: 700; }
 .skip:focus { top: calc(.5rem + var(--safe-t)); }
 :focus-visible { outline: .2rem solid var(--focus); outline-offset: .15rem; border-radius: .5rem; }
-main:focus, h1:focus { outline: none; }
-h1:focus-visible { outline: .2rem solid var(--focus); }
+/* Headings receive focus only programmatically (for VoiceOver after navigation); never draw a ring around them. */
+main:focus, main:focus-visible, h1:focus, h1:focus-visible, [tabindex="-1"]:focus, [tabindex="-1"]:focus-visible { outline: none; }
 
 main { max-width: 46rem; margin: 0 auto; padding: calc(1rem + var(--safe-t)) 1rem calc(8rem + var(--safe-b)); }
 body.focus-mode main { padding-bottom: 2rem; }
