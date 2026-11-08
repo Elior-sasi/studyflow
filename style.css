@@ -281,16 +281,28 @@ body.high-contrast del { background: none; outline: 1px dashed #ff9a9a; }
 #timer-bar[hidden], .toast[hidden] { display: none; }
 #timer-bar .t { font-weight: 800; font-variant-numeric: tabular-nums; font-size: 1.15rem; }
 #timer-bar .grow { flex: 1; min-width: 8rem; }
-#tabbar { width: 100%; display: flex; justify-content: center; background: color-mix(in srgb, var(--bg) 82%, transparent); border-top: 1px solid var(--glass-border); padding: .3rem .3rem calc(.3rem + var(--safe-b)); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); }
-body.high-contrast #tabbar { background: var(--bg); }
-#tabbar ul { display: flex; list-style: none; margin: 0; padding: 0; width: 100%; max-width: 40rem; justify-content: space-around; }
-#tabbar li { flex: 1; }
-#tabbar a { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .1rem; min-height: max(48px, min(3.4rem, 64px)); text-decoration: none; color: var(--muted); font-size: clamp(11px, .8rem, 3.9vw); text-align: center; line-height: 1.15; font-weight: 600; border-radius: .8rem; }
-#tabbar a .ico { width: min(1.6rem, 8vw); height: min(1.6rem, 8vw); }
-#tabbar li { min-width: 0; }
+/* Floating glass tab bar in the HomeOn / iOS style: a capsule above the home indicator with a sliding pill on the active tab */
+#tabbar { position: relative; width: calc(100% - 32px); max-width: 560px; height: 64px; margin: 0 auto calc(12px + var(--safe-b)); padding: 4px; border-radius: 999px;
+  background: rgba(28, 28, 30, .88); box-shadow: 0 0 0 .5px #ffffff1f, 0 10px 30px #000c; -webkit-backdrop-filter: blur(24px) saturate(160%); backdrop-filter: blur(24px) saturate(160%); }
+#tabbar::before { content: ""; position: absolute; inset-block: 4px; right: calc(4px + var(--tab, 0) * (100% - 8px) / 5); width: calc((100% - 8px) / 5); border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 20%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 40%, transparent); transition: right .32s cubic-bezier(.2, .8, .2, 1); }
+#tabbar ul { position: relative; display: flex; list-style: none; margin: 0; padding: 0; height: 100%; }
+#tabbar li { flex: 1; min-width: 0; }
+#tabbar a { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; text-decoration: none; color: rgba(255, 255, 255, .85);
+  font-size: clamp(10px, .72rem, 3.4vw); line-height: 1.1; font-weight: 600; text-align: center; border-radius: 999px; }
+#tabbar a .ico { width: 23px; height: 23px; }
 #tabbar a[aria-current="page"] { color: var(--accent); }
-#tabbar a[aria-current="page"] .ico { filter: drop-shadow(0 0 .5rem color-mix(in srgb, var(--accent) 70%, transparent)); }
-body.high-contrast #tabbar a[aria-current="page"] { color: var(--accent-ink); background: var(--accent); }
+#tabbar a[aria-current="page"] .ico { stroke-width: 2.3; }
+[data-theme="light"] #tabbar { background: rgba(255, 255, 255, .88); box-shadow: 0 0 0 .5px #0000001a, 0 10px 30px #0e163326; }
+[data-theme="light"] #tabbar a { color: #3c4668; }
+[data-theme="light"] #tabbar a[aria-current="page"] { color: var(--accent); }
+body.high-contrast #tabbar { background: var(--bg); box-shadow: 0 0 0 2px var(--glass-border); -webkit-backdrop-filter: none; backdrop-filter: none; }
+body.high-contrast #tabbar::before { background: var(--accent); box-shadow: none; }
+body.high-contrast #tabbar a { color: var(--text); }
+body.high-contrast #tabbar a[aria-current="page"] { color: var(--accent-ink); }
+html.reduce-motion #tabbar::before { transition: none; }
+@media (prefers-reduced-motion: reduce) { #tabbar::before { transition: none; } }
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) { #tabbar { background: #1c1c1ef5; } }
 
 /* Dialog */
 dialog { width: min(42rem, calc(100% - 1rem)); max-height: calc(100vh - 2rem); border: 1px solid var(--glass-border); border-radius: 1.3rem; background: var(--bg-2); color: var(--text); padding: 1rem 1.1rem; box-shadow: var(--shadow); }

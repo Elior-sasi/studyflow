@@ -117,6 +117,7 @@ const TITLES = { home: 'בית', lumi: 'לומי', courses: 'הקורסים של
 
 function renderNav() {
   const current = TAB_OF[route().name];
+  $('tabbar').style.setProperty('--tab', Math.max(0, TABS.findIndex(t => t[0] === current)));
   $('tabbar').innerHTML = `<ul>${TABS.map(([r, label, ic]) => `<li><a href="#${r}" ${r === current ? 'aria-current="page"' : ''}>${icon(ic)}<span>${label}</span></a></li>`).join('')}</ul>`;
 }
 
