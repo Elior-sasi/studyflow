@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.2 - 2026-11-08
+
+- **Send to NotebookLM**: a lesson is saved as a Google Doc in a "StudyFlow" Drive folder (scope `drive.file`: only files the app creates); sending again updates the same doc, so NotebookLM can re-sync it. NotebookLM has no public API, so it is added there as a Drive source.
+- **Free AI fallbacks**: Lumi tries providers in order Gemini -> Groq -> OpenRouter -> Claude (whichever keys exist). Groq and OpenRouter use their OpenAI-compatible endpoints (`GROQ_API_KEY` default model `openai/gpt-oss-120b`, `OPENROUTER_API_KEY` default `meta-llama/llama-3.3-70b-instruct:free`). Each answer shows which provider replied.
+
 ## 0.5.1 - 2026-11-08
 
 - Lumi writes an organized **study summary** from any lesson (e.g. imported lecturer slides), saved as a new lesson.

@@ -103,7 +103,7 @@ function bubble(m) {
   if (m.mine) return `<div class="bubble mine"><span class="who">אני</span><p>${esc(m.text)}</p></div>`;
   const text = esc(m.text).replace(/\[(\d)\]/g, (all, n) => (m.sources?.[n - 1] ? `<span class="cite">[${n}]</span>` : all));
   const src = m.sources?.length ? `<p class="small"><b>מקורות:</b></p><ul class="small">${m.sources.map((s, i) => `<li><a href="#lesson/${esc(s.noteId)}/${s.card}">[${i + 1}] ${esc(s.label)}</a></li>`).join('')}</ul>` : '';
-  return `<div class="bubble bot ${m.error ? 'error-bubble' : ''}"><span class="who">לומי${m.local ? ' · מקומי' : ''}</span><p>${text}</p>${src}</div>`;
+  return `<div class="bubble bot ${m.error ? 'error-bubble' : ''}"><span class="who">לומי${m.local ? ' · מקומי' : m.via ? ' · ' + esc(m.via) : ''}</span><p>${text}</p>${src}</div>`;
 }
 
 // ---------- Courses ----------
@@ -164,8 +164,8 @@ function notFound(text) {
 function toolsCard(n, ui) {
   const ai = ui.ai.verified;
   return `<section class="card" aria-labelledby="tools-h"><h2 id="tools-h">יצירה וייצוא מהשיעור</h2>
-    <div class="actions">${ai ? btn(icon('sparkle') + ' לומי: סיכום', 'ai-summary', n.id, 'primary') + btn(icon('sparkle') + ' לומי: מצגת', 'ai-slides', n.id) + btn(icon('headphones') + ' לומי: פודקאסט', 'ai-podcast', n.id) : ''}${btn(icon('download') + ' PowerPoint', 'export-pptx', n.id)}${btn(icon('doc') + ' הדפסה / PDF', 'go', '#print/' + n.id)}</div>
-    <p class="hint">${ai ? 'כל יצירה של לומי נשמרת כשיעור חדש באותו קורס. המקור לא משתנה.' : 'כדי שלומי ייצור סיכום, מצגת או פודקאסט צריך לחבר את לומי AI במסך "עוד".'}</p></section>`;
+    <div class="actions">${ai ? btn(icon('sparkle') + ' לומי: סיכום', 'ai-summary', n.id, 'primary') + btn(icon('sparkle') + ' לומי: מצגת', 'ai-slides', n.id) + btn(icon('headphones') + ' לומי: פודקאסט', 'ai-podcast', n.id) : ''}${btn(icon('download') + ' PowerPoint', 'export-pptx', n.id)}${btn(icon('doc') + ' הדפסה / PDF', 'go', '#print/' + n.id)}${btn(icon('book') + ' שליחה ל-NotebookLM', 'send-notebooklm', n.id)}</div>
+    <p class="hint">"שליחה ל-NotebookLM" שומרת את השיעור כמסמך Google בתיקיית StudyFlow ב-Drive, ומשם מוסיפים אותו כמקור במחברת. ${ai ? 'כל יצירה של לומי נשמרת כשיעור חדש באותו קורס. המקור לא משתנה.' : 'כדי שלומי ייצור סיכום, מצגת או פודקאסט צריך לחבר את לומי AI במסך "עוד".'}</p></section>`;
 }
 
 export function lesson(st, ui, noteId) {
@@ -359,8 +359,8 @@ export function more(st, ui, env) {
   <section class="card" aria-labelledby="ai-h"><h2 id="ai-h">לומי AI</h2>
     ${ai.configured === null ? '<p>בודק אם השרת זמין…</p>'
       : !ai.configured ? `<p><span class="badge">לא מוגדר</span></p><p>השרת של האפליקציה עדיין לא הוגדר עם ספק AI, ולכן לומי פועל במצב מקומי. ${ai.reason ? esc(ai.reason) : ''}</p><p class="hint">להפעלה: ב-Vercel מגדירים את משתני הסביבה GEMINI_API_KEY (או ANTHROPIC_API_KEY) ו-LUMI_ACCESS_CODE - קוד גישה פרטי שמונע שימוש של אחרים במפתח. המפתח נשמר רק בשרת.</p>`
-      : ai.verified ? `<p><span class="badge ok">מחובר ומאומת</span>${ai.provider ? ' · ' + esc(ai.provider) : ''}</p><p>שאלות נשלחות לשרת יחד עם קטעים רלוונטיים מהסיכומים שלך בלבד. שום דבר לא נשמר בשרת.</p>${btn('ניתוק מהמכשיר הזה', 'ai-forget', '', 'danger')}`
-      : `<p><span class="badge">דרוש קוד גישה</span></p><form id="ai-form"><label for="ai-code">קוד הגישה של לומי</label><input id="ai-code" name="code" type="password" autocomplete="current-password" maxlength="200" required><p class="hint">הקוד נשמר רק בדפדפן הזה ואינו נכלל בגיבויים.</p><button class="primary">חיבור ובדיקה</button></form>`}
+      : ai.verified ? `<p><span class="badge ok">מחובר ומאומת</span>${ai.provider ? ' · ' + esc(ai.provider) : ''}</p>${/←/.test(ai.provider || '') ? '<p class="hint">אם הספק הראשון עמוס או נכשל, לומי עובר אוטומטית לבא בתור. בכל תשובה כתוב איזה ספק ענה.</p>' : ''}<p>שאלות נשלחות לשרת יחד עם קטעים רלוונטיים מהסיכומים שלך בלבד. שום דבר לא נשמר בשרת.</p>${btn('ניתוק מהמכשיר הזה', 'ai-forget', '', 'danger')}`
+      : `<p><span class="badge">דרוש קוד גישה</span>${ai.provider ? ' · ' + esc(ai.provider) : ''}</p><form id="ai-form"><label for="ai-code">קוד הגישה של לומי</label><input id="ai-code" name="code" type="password" autocomplete="current-password" maxlength="200" required><p class="hint">הקוד נשמר רק בדפדפן הזה ואינו נכלל בגיבויים.</p><button class="primary">חיבור ובדיקה</button></form>`}
   </section>
 
   <section class="card" aria-labelledby="int-h"><h2 id="int-h">חיבורים</h2>

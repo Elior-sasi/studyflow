@@ -1,9 +1,10 @@
 // Google account (OAuth redirect flow, no third-party scripts), cloud sync client, Drive import,
 // Calendar sync and Web Push subscription. Tokens live in sessionStorage; the StudyFlow session in localStorage.
 import { noteCards, today } from './model.mjs';
+import { esc, formatBody } from './content.mjs';
 
 export const GOOGLE_CLIENT_ID = '870684431597-vmg2gtfn383s0lcjgfomemhstci7spr8.apps.googleusercontent.com';
-export const SCOPES = { drive: 'https://www.googleapis.com/auth/drive.readonly', calendar: 'https://www.googleapis.com/auth/calendar.events' };
+export const SCOPES = { drive: 'https://www.googleapis.com/auth/drive.readonly', driveFile: 'https://www.googleapis.com/auth/drive.file', calendar: 'https://www.googleapis.com/auth/calendar.events' };
 const SESSION_KEY = 'studyflow-session', SYNC_KEY = 'studyflow-sync', TOKEN_KEY = 'sf-gtoken', OAUTH_KEY = 'sf-oauth', PUSH_KEY = 'studyflow-push';
 
 const ls = { get: k => { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch { return null; } }, set: (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} }, del: k => { try { localStorage.removeItem(k); } catch {} } };
@@ -100,6 +101,44 @@ export async function driveContent(token, file) {
   if (Number(file.size) > 60_000_000) throw Error('הקובץ גדול מדי.');
   const r = await gfetch(base + '?alt=media', token);
   return file.mimeType.includes('presentationml') ? { kind: 'pptx', buffer: await r.arrayBuffer() } : { kind: 'text', text: await r.text() };
+}
+
+// ---------- Lesson -> Google Doc (for NotebookLM). drive.file scope: only files this app created. ----------
+const DOCS_KEY = 'studyflow-drive-docs';
+export function lessonHTML(note, courseName) {
+  const cards = noteCards(note);
+  return `<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8"><title>${esc(note.title)}</title></head><body dir="rtl">
+<h1>${esc(note.title)}</h1><p>${esc(courseName)} · יוצא מ-StudyFlow</p>
+${cards.map(c => `<h2>${esc(c.title || note.title)}</h2>${formatBody(c.body)}`).join('\n')}</body></html>`;
+}
+export async function saveLessonToDrive(token, note, courseName) {
+  const docs = ls.get(DOCS_KEY) || {};
+  const name = `${courseName ? courseName + ' - ' : ''}${note.title}`.slice(0, 200);
+  const html = lessonHTML(note, courseName);
+  const boundary = 'sf' + rand();
+  const multipart = meta => `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(meta)}\r\n--${boundary}\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n${html}\r\n--${boundary}--`;
+  const headers = { 'content-type': 'multipart/related; boundary=' + boundary };
+  const existing = docs[note.id];
+  if (existing) {
+    try {
+      const r = await gfetch(`https://www.googleapis.com/upload/drive/v3/files/${encodeURIComponent(existing)}?uploadType=multipart&fields=id,name,webViewLink`, token, { method: 'PATCH', headers, body: multipart({ name }) });
+      const j = await r.json();
+      return { name: j.name, link: j.webViewLink, updated: true };
+    } catch (e) { if (e.reauth) throw e; /* deleted in Drive: create a new one */ }
+  }
+  let folder = docs._folder;
+  if (folder) {
+    const ok = await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(folder)}?fields=id,trashed`, { headers: { authorization: 'Bearer ' + token } }).then(r => r.ok ? r.json() : null).catch(() => null);
+    if (!ok || ok.trashed) folder = '';
+  }
+  if (!folder) {
+    const r = await gfetch('https://www.googleapis.com/drive/v3/files?fields=id', token, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: 'StudyFlow', mimeType: 'application/vnd.google-apps.folder' }) });
+    folder = (await r.json()).id;
+  }
+  const r = await gfetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink', token, { method: 'POST', headers, body: multipart({ name, mimeType: 'application/vnd.google-apps.document', parents: [folder] }) });
+  const j = await r.json();
+  ls.set(DOCS_KEY, { ...docs, _folder: folder, [note.id]: j.id });
+  return { name: j.name, link: j.webViewLink, updated: false };
 }
 
 // ---------- Google Calendar (one-way: StudyFlow -> primary calendar) ----------

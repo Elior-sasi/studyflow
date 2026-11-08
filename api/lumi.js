@@ -1,7 +1,8 @@
 // Lumi server endpoint (Vercel Function, Web Request/Response API).
 // Secrets stay on the server as Vercel environment variables:
 //   LUMI_ACCESS_CODE + GEMINI_API_KEY (Google Gemini)  or  LUMI_ACCESS_CODE + ANTHROPIC_API_KEY (Claude).
-//   LUMI_PROVIDER ('gemini' | 'anthropic') picks one when both keys exist; LUMI_MODEL overrides the model.
+//   Optional free fallbacks: GROQ_API_KEY (GROQ_MODEL), OPENROUTER_API_KEY (OPENROUTER_MODEL). Providers are tried in order
+//   gemini -> groq -> openrouter -> anthropic; LUMI_PROVIDER moves one to the front; LUMI_MODEL overrides the Gemini/Claude model.
 // Without a provider key and an access code, the endpoint reports "not configured" and the app stays in local mode.
 import { createHash, timingSafeEqual } from 'node:crypto';
 
@@ -107,15 +108,45 @@ export function parseQuestions(text) {
   } catch { return []; }
 }
 
+const KEYS = { gemini: 'GEMINI_API_KEY', groq: 'GROQ_API_KEY', openrouter: 'OPENROUTER_API_KEY', anthropic: 'ANTHROPIC_API_KEY' };
+const LABELS = { gemini: 'Gemini', groq: 'Groq', openrouter: 'OpenRouter', anthropic: 'Claude' };
+/** Ordered provider chain: LUMI_PROVIDER first if set, then every other provider that has a key. */
+export function providersOf(env) {
+  const want = String(env.LUMI_PROVIDER || '').toLowerCase();
+  const order = [want, 'gemini', 'groq', 'openrouter', 'anthropic'].filter((p, i, a) => KEYS[p] && a.indexOf(p) === i);
+  return order.filter(p => env[KEYS[p]]);
+}
 export function providerOf(env) {
   const want = String(env.LUMI_PROVIDER || '').toLowerCase();
-  if (want === 'gemini') return env.GEMINI_API_KEY ? 'gemini' : '';
-  if (want === 'anthropic') return env.ANTHROPIC_API_KEY ? 'anthropic' : '';
-  return env.GEMINI_API_KEY ? 'gemini' : env.ANTHROPIC_API_KEY ? 'anthropic' : '';
+  if (KEYS[want]) return env[KEYS[want]] ? want : '';
+  return providersOf(env)[0] || '';
 }
+const OPENAI_COMPAT = {
+  groq: { url: 'https://api.groq.com/openai/v1/chat/completions', model: env => env.GROQ_MODEL || 'openai/gpt-oss-120b' },
+  openrouter: { url: 'https://openrouter.ai/api/v1/chat/completions', model: env => env.OPENROUTER_MODEL || 'meta-llama/llama-3.3-70b-instruct:free' },
+};
 
 /** Provider-specific request building and response parsing. Both return {ok, status, text}. */
 async function callProvider(provider, env, req, json, fetchImpl, signal) {
+  if (OPENAI_COMPAT[provider]) {
+    const cfg = OPENAI_COMPAT[provider], model = cfg.model(env);
+    const r = await fetchImpl(cfg.url, {
+      method: 'POST', signal,
+      headers: { 'content-type': 'application/json', authorization: 'Bearer ' + env[KEYS[provider]], ...(provider === 'openrouter' ? { 'x-title': 'StudyFlow' } : {}) },
+      body: JSON.stringify({
+        model, temperature: 0.4, max_tokens: req.max_tokens * 2,
+        messages: [{ role: 'system', content: req.system }, ...req.messages.map(m => ({ role: m.role, content: m.content }))],
+        ...(json ? { response_format: { type: 'json_object' } } : {}),
+        ...(/gpt-oss/.test(model) ? { reasoning_effort: 'low' } : {}),
+      }),
+    });
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      return { ok: false, status: r.status, detail: String(err.error?.message || '').replace(/(gsk|sk-or)[-_\w]+/g, '[key]').slice(0, 240) };
+    }
+    const data = await r.json();
+    return { ok: true, text: String(data.choices?.[0]?.message?.content || '').trim() };
+  }
   if (provider === 'gemini') {
     // Primary model, then aliases that Google keeps pointed at current models, for high-demand or retired-model errors.
     const models = [...new Set([env.LUMI_MODEL || 'gemini-3.8-flash', 'gemini-flash-latest', 'gemini-flash-lite-latest'])];
@@ -163,7 +194,7 @@ export function createHandler({ env, fetchImpl, now = () => Date.now() }) {
   const configured = () => Boolean(providerOf(env) && env.LUMI_ACCESS_CODE);
   return {
     async GET() {
-      return json(200, { configured: configured(), provider: configured() ? providerOf(env) : null });
+      return json(200, { configured: configured(), provider: configured() ? providerOf(env) : null, providers: configured() ? providersOf(env).map(p => LABELS[p]) : [] });
     },
     async POST(request) {
       if (!configured()) return json(503, { error: 'not_configured' });
@@ -181,31 +212,44 @@ export function createHandler({ env, fetchImpl, now = () => Date.now() }) {
       if (body.mode === 'ping') return json(200, { ok: true });
 
       const req = buildRequest(body);
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 110_000);
+      const wantsJSON = body.mode === 'questions' || body.mode === 'slides';
+      const started = Date.now();
+      // Try each configured provider in turn; a busy, failing or slow provider hands over to the next one.
+      const attempt = async provider => {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), Math.max(15_000, 110_000 - (Date.now() - started)));
+        try { return await callProvider(provider, env, req, wantsJSON, fetchImpl, controller.signal); }
+        catch { return { ok: false, status: 504, detail: 'timeout' }; }
+        finally { clearTimeout(timer); }
+      };
       try {
-        const r = await callProvider(providerOf(env), env, req, body.mode === 'questions' || body.mode === 'slides', fetchImpl, controller.signal);
-        if (!r.ok) return json(502, { error: r.status === 429 || r.status === 503 ? 'provider_busy' : 'provider_error', upstream: r.status, detail: r.detail || '' });
+        let r = null, via = '';
+        for (const p of providersOf(env)) {
+          if (Date.now() - started > 100_000) break;
+          r = await attempt(p); via = p;
+          if (r.ok && r.text) break;
+          if (r.status === 400 || r.status === 401 || r.status === 403) continue;
+        }
+        if (!r || !r.ok) return json(r?.status === 504 ? 504 : 502, { error: r?.status === 504 ? 'provider_unreachable' : r?.status === 429 || r?.status === 503 ? 'provider_busy' : 'provider_error', upstream: r?.status, detail: r?.detail || '' });
         let out = r.text;
         // Guard against mixed-script glitches (Arabic letters inside Hebrew text): ask once more.
         if (/[\u0600-\u06FF]/.test(out)) {
-          const again = await callProvider(providerOf(env), env, req, body.mode === 'questions', fetchImpl, controller.signal);
+          const again = await attempt(via);
           if (again.ok && again.text && !/[\u0600-\u06FF]/.test(again.text)) out = again.text;
         }
+        const viaLabel = LABELS[via];
         if (!out) return json(502, { error: 'empty_response' });
         if (body.mode === 'slides') {
           const slides = parseSlides(out);
-          return slides.length ? json(200, { slides }) : json(502, { error: 'bad_format' });
+          return slides.length ? json(200, { slides, via: viaLabel }) : json(502, { error: 'bad_format' });
         }
         if (body.mode === 'questions') {
           const questions = parseQuestions(out);
-          return questions.length ? json(200, { questions }) : json(502, { error: 'bad_format' });
+          return questions.length ? json(200, { questions, via: viaLabel }) : json(502, { error: 'bad_format' });
         }
-        return json(200, { text: out.slice(0, 40000) });
+        return json(200, { text: out.slice(0, 40000), via: viaLabel });
       } catch {
         return json(504, { error: 'provider_unreachable' });
-      } finally {
-        clearTimeout(timer);
       }
     },
   };

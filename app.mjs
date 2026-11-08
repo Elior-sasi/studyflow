@@ -473,7 +473,7 @@ async function aiInit() {
     if (!r.ok || !/json/.test(r.headers.get('content-type') || '')) throw Error();
     const info = await r.json();
     ui.ai.configured = Boolean(info.configured);
-    ui.ai.provider = info.provider === 'gemini' ? 'Gemini' : info.provider === 'anthropic' ? 'Claude' : '';
+    ui.ai.provider = (info.providers || []).join(' ← ') || '';
     if (ui.ai.configured && aiCode()) {
       try { await callLumi({ mode: 'ping' }); ui.ai.verified = true; } catch { ui.ai.verified = false; }
     }
@@ -504,7 +504,7 @@ async function sendChat(text) {
   while (messages.length && messages[0].role !== 'user') messages.shift();
   try {
     const j = await callLumi({ mode: 'chat', messages, sources: sources.map(s => ({ label: s.label, text: s.text.slice(0, 3000) })) });
-    ui.chat.push({ mine: false, text: j.text, sources });
+    ui.chat.push({ mine: false, text: j.text, sources, via: j.via });
   } catch (e) {
     ui.chat.push({ mine: false, error: true, text: e.message });
   } finally {
@@ -724,6 +724,22 @@ const actions = {
     commit(d => { d.notes.push(v); });
     location.hash = 'lesson/' + v.id;
     status(`נוצרה מצגת של ${j.slides.length} שקופיות. אפשר לערוך אותה או לייצא ל-PowerPoint.`, { undo: true });
+  },
+  'send-notebooklm': async id => {
+    const n = state.notes.find(x => x.id === id);
+    if (!n) return;
+    const token = C.accessToken(C.SCOPES.driveFile);
+    if (!token) { C.startGoogleAuth('drive-file', [C.SCOPES.driveFile], location.hash, { action: 'send-notebooklm', id }); return; }
+    status('שומר את השיעור כמסמך ב-Google Drive…');
+    const courseName = state.courses.find(c => c.id === n.courseId)?.name || '';
+    let doc;
+    try { doc = await C.saveLessonToDrive(token, n, courseName); }
+    catch (e) { if (e.reauth) return C.startGoogleAuth('drive-file', [C.SCOPES.driveFile], location.hash, { action: 'send-notebooklm', id }); throw e; }
+    openEditor('השיעור נשמר ב-Google Drive', `<p>${doc.updated ? 'המסמך הקיים עודכן' : 'נוצר מסמך Google'} בשם <b>${esc(doc.name)}</b> בתיקייה "StudyFlow" ב-Drive שלך.</p>
+      <p>כדי להוסיף אותו ל-NotebookLM:</p><ol><li>פותחים את NotebookLM ובוחרים מחברת (או יוצרים חדשה).</li><li>לוחצים "הוספת מקור" ובוחרים Google Drive.</li><li>בוחרים את המסמך מהתיקייה StudyFlow.</li></ol>
+      <p class="hint">בפעם הבאה שתשלח את אותו שיעור, המסמך יתעדכן, ואפשר לסנכרן אותו ב-NotebookLM בלחיצה על המקור.</p>
+      <div class="actions"><a class="button primary" href="https://notebooklm.google.com/" target="_blank" rel="noopener noreferrer">פתיחת NotebookLM</a><a class="button" href="${esc(doc.link)}" target="_blank" rel="noopener noreferrer">פתיחת המסמך</a></div>`, null);
+    status('');
   },
   'ai-summary': async id => {
     const n = state.notes.find(x => x.id === id);

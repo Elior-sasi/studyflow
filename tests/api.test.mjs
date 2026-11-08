@@ -17,14 +17,14 @@ const ipHeader = () => ({ 'x-forwarded-for': '10.0.0.' + (++ip) });
 
 test('reports not configured and refuses work without server secrets', async () => {
   const h = createHandler({ env: {}, fetchImpl: fakeFetch() });
-  assert.deepEqual(await (await h.GET()).json(), { configured: false, provider: null });
+  assert.deepEqual(await (await h.GET()).json(), { configured: false, provider: null, providers: [] });
   assert.equal((await (await createHandler({ env: { GEMINI_API_KEY: 'g' }, fetchImpl: fakeFetch() }).GET()).json()).configured, false, 'a key without an access code is not enough');
   assert.equal((await h.POST(post(chat()))).status, 503);
 });
 
 test('requires the access code and never calls the provider without it', async () => {
   const f = fakeFetch(), h = createHandler({ env, fetchImpl: f });
-  assert.deepEqual(await (await h.GET()).json(), { configured: true, provider: 'anthropic' });
+  assert.deepEqual(await (await h.GET()).json(), { configured: true, provider: 'anthropic', providers: ['Claude'] });
   assert.equal((await h.POST(post(chat({ code: 'wrong' }), ipHeader()))).status, 401);
   assert.equal(f.calls.length, 0);
   const ok = await h.POST(post({ code: env.LUMI_ACCESS_CODE, mode: 'ping' }, ipHeader()));
@@ -98,9 +98,9 @@ test('Gemini provider: chosen automatically, key in header only, response parsed
   const calls = [];
   const gfetch = async (url, init) => { calls.push({ url, init, body: JSON.parse(init.body) }); return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: 'תשובה מג׳מיני [1]' }] } }] }), { status: 200 }); };
   const h = createHandler({ env: genv, fetchImpl: gfetch });
-  assert.deepEqual(await (await h.GET()).json(), { configured: true, provider: 'gemini' });
+  assert.deepEqual(await (await h.GET()).json(), { configured: true, provider: 'gemini', providers: ['Gemini'] });
   const r = await h.POST(post(chat({ messages: [{ role: 'user', text: 'א' }, { role: 'assistant', text: 'ב' }, { role: 'user', text: 'ג' }] }), ipHeader()));
-  assert.deepEqual(await r.json(), { text: 'תשובה מג׳מיני [1]' });
+  assert.deepEqual(await r.json(), { text: 'תשובה מג׳מיני [1]', via: 'Gemini' });
   assert.match(calls[0].url, /generativelanguage\.googleapis\.com\/v1beta\/models\/gemini-3\.8-flash:generateContent$/);
   assert.doesNotMatch(calls[0].url, /AIza/, 'key is never in the URL');
   assert.equal(calls[0].init.headers['x-goog-api-key'], 'AIza-secret');
@@ -118,7 +118,7 @@ test('Gemini falls back to current model aliases when the primary is busy or ret
   const seen = [];
   const f = async url => { const m = /models\/([^:]+):/.exec(url)[1]; seen.push(m); return m === 'gemini-flash-latest' ? new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: 'עובד' }] } }] }), { status: 200 }) : new Response('{"error":{"status":"NOT_FOUND"}}', { status: 404 }); };
   const r = await createHandler({ env: genv, fetchImpl: f }).POST(post(chat(), ipHeader()));
-  assert.deepEqual(await r.json(), { text: 'עובד' });
+  assert.deepEqual(await r.json(), { text: 'עובד', via: 'Gemini' });
   assert.deepEqual(seen, ['gemini-3.8-flash', 'gemini-flash-latest']);
 });
 
@@ -126,7 +126,7 @@ test('answers with Arabic letters mixed into Hebrew are regenerated once', async
   let n = 0;
   const f = async () => new Response(JSON.stringify({ content: [{ type: 'text', text: n++ ? 'תשובה תקינה' : 'לשؤالתך' }] }), { status: 200 });
   const r = await createHandler({ env, fetchImpl: f }).POST(post(chat(), ipHeader()));
-  assert.deepEqual(await r.json(), { text: 'תשובה תקינה' });
+  assert.deepEqual(await r.json(), { text: 'תשובה תקינה', via: 'Claude' });
   assert.equal(n, 2);
 });
 
@@ -137,7 +137,33 @@ test('slides and podcast modes: grounded prompts and defensive parsing', async (
   assert.deepEqual(parseSlides('oops'), []);
   const h = createHandler({ env, fetchImpl: fakeFetch('{"slides":[{"title":"פתיחה","bullets":["נקודה"]}]}') });
   const r = await h.POST(post({ code: env.LUMI_ACCESS_CODE, mode: 'slides', title: 'ת', text: 'טקסט' }, ipHeader()));
-  assert.deepEqual(await r.json(), { slides: [{ title: 'פתיחה', bullets: ['נקודה'], notes: '' }] });
+  assert.deepEqual(await r.json(), { slides: [{ title: 'פתיחה', bullets: ['נקודה'], notes: '' }], via: 'Claude' });
   const p = createHandler({ env, fetchImpl: fakeFetch('# פתיחה\nשלום') });
-  assert.deepEqual(await (await p.POST(post({ code: env.LUMI_ACCESS_CODE, mode: 'podcast', title: 'ת', text: 'טקסט' }, ipHeader()))).json(), { text: '# פתיחה\nשלום' });
+  assert.deepEqual(await (await p.POST(post({ code: env.LUMI_ACCESS_CODE, mode: 'podcast', title: 'ת', text: 'טקסט' }, ipHeader()))).json(), { text: '# פתיחה\nשלום', via: 'Claude' });
+});
+
+test('free fallback chain: busy Gemini hands over to Groq (OpenAI-compatible), keys only in headers', async () => {
+  const genv = { GEMINI_API_KEY: 'AIza-x', GROQ_API_KEY: 'gsk_secret', OPENROUTER_API_KEY: 'sk-or-x', LUMI_ACCESS_CODE: env.LUMI_ACCESS_CODE };
+  const seen = [];
+  const f = async (url, init) => {
+    seen.push(url);
+    if (url.includes('generativelanguage')) return new Response('{"error":{"status":"UNAVAILABLE"}}', { status: 503 });
+    if (url.includes('groq')) {
+      const b = JSON.parse(init.body);
+      assert.equal(init.headers.authorization, 'Bearer gsk_secret');
+      assert.equal(b.messages[0].role, 'system');
+      assert.equal(b.reasoning_effort, 'low');
+      return new Response(JSON.stringify({ choices: [{ message: { content: 'תשובה מ-Groq [1]' } }] }), { status: 200 });
+    }
+    throw Error('should not reach ' + url);
+  };
+  const h = createHandler({ env: genv, fetchImpl: f });
+  assert.deepEqual((await (await h.GET()).json()).providers, ['Gemini', 'Groq', 'OpenRouter']);
+  const r = await h.POST(post(chat(), ipHeader()));
+  assert.deepEqual(await r.json(), { text: 'תשובה מ-Groq [1]', via: 'Groq' });
+  assert.ok(seen.every(u => !/gsk_|AIza|sk-or/.test(u)));
+  const allBusy = createHandler({ env: genv, fetchImpl: async () => new Response('{}', { status: 429 }) });
+  assert.equal((await (await allBusy.POST(post(chat(), ipHeader()))).json()).error, 'provider_busy');
+  const onlyGroq = createHandler({ env: { GROQ_API_KEY: 'g', LUMI_ACCESS_CODE: 'c' }, fetchImpl: f });
+  assert.equal((await (await onlyGroq.GET()).json()).provider, 'groq');
 });
